@@ -11,7 +11,7 @@ _ids = {}
 
 
 # Format codes
-formatCodes = {
+format_codes = {
     "colors":'0123456789abcdef',
     "styles":'klmnor',
     "list":[
@@ -41,11 +41,11 @@ formatCodes = {
     ],
 }
 
-def getColor(match,key=None):
+def get_color(match,key=None):
     """
     Return one piece of color information by an ID or name
     """
-    for format in formatCodes["list"]:
+    for format in format_codes["list"]:
         if (
             str(match).lower() == format["id"] or
             str(match).lower() == format["display"].lower() or
@@ -55,7 +55,7 @@ def getColor(match,key=None):
             # otherwise the whole format
             return format.get(key,format)
 
-def unformatText(text):
+def unformat_text(text):
     """
     Return the provided text without §-style format codes
     """
@@ -64,15 +64,21 @@ def unformatText(text):
         text = text[:i]+text[i+2:]
     return text
 
-def ansifyText(text):
+def ansify_text(text,show_section=False):
     """
     Return the provided text with §-style format codes converted to ansi format codes (compatible with most terminals)
     """
+    result = ''
     while '§' in text:
         i = text.find('§')
-        ansiCode = getColor(text[i+1],'ansi')
-        text = text[:i]+ansiCode+text[i+2:]
-    return text
+        ansiCode = get_color(text[i+1],'ansi')
+        result += text[:i]
+        if show_section:
+            result += text[i:i+2]
+        result += ansiCode
+        text = text[i+2:]
+    result += text
+    return result
 
 # Base types ------------------------------------------------------------------
 
@@ -81,8 +87,8 @@ class _Tag(object):
     def __init__(self, value):
         self.value = value
 
-    prefix = ('',getColor('gold','ansi'))
-    postfix = ('',getColor('reset','ansi'))
+    prefix = ('',get_color('gold','ansi'))
+    postfix = ('',get_color('reset','ansi'))
 
     @classmethod
     def from_bytes(cls, bytes):
@@ -98,6 +104,9 @@ class _Tag(object):
     def to_obj(self):
         return self.value
 
+    def __hash__(self):
+        return hash(self.to_bytes())
+
     def __repr__(self):
         return "%s(%r)" % (type(self).__name__, self.value)
 
@@ -107,8 +116,21 @@ class _Tag(object):
     def __lt__(self, other):
         return self.to_obj() < other.to_obj()
 
-    def to_json(self,sort=None,highlight=False):
-        return self.prefix[highlight] + str(self.value) + self.postfix[highlight]
+    def to_mojangson(self,sort=None,highlight=False):
+        prefix = self.prefix[highlight]
+        postfix = self.postfix[highlight]
+
+        return prefix + str(self.value) + postfix
+
+    def tree(self,sort=None,indent='    ',level=0):
+        prefix = self.prefix[True]
+        postfix = self.postfix[True]
+
+        result = prefix + str(self.value) + postfix
+        if level == 0:
+            print(result)
+        else:
+            return result
 
 
 class _DataTag(_Tag):
@@ -124,13 +146,25 @@ class _DataTag(_Tag):
     def is_subset(self,other):
         return self.value == other.value
 
+    def has_path(self,path):
+        if len(path) == 0:
+            return True
+        else:
+            return False
+
     def at_path(self,path):
-        return self
+        if len(path) == 0:
+            return self
+        else:
+            raise KeyError( str(type(self)) + ' cannot contain other tags, and is the end of path "' + path + '"' )
 
 
 class _ArrayTag(_Tag):
     fmt = None
-    separator = (',',getColor('white','ansi')+', ')
+    separator = (',',get_color('white','ansi')+', ')
+
+    def __len__(self):
+        return len(self.value)
 
     @classmethod
     def from_buff(cls, buff):
@@ -153,11 +187,56 @@ class _ArrayTag(_Tag):
                 return False
         return True
 
-    def to_json(self,sort=None,highlight=False):
-        content_json = []
+    def to_mojangson(self,sort=None,highlight=False):
+        prefix = self.prefix[highlight]
+        separator = self.separator[highlight]
+        type_postfix = self.type_postfix[highlight]
+        postfix = self.postfix[highlight]
+
+        inner_mojangson = []
         for content in self.value:
-            content_json.append(content.to_json(sort,highlight))
-        return self.prefix[highlight] + self.separator[highlight].join(content_json) + self.postfix[highlight]
+            inner_mojangson.append( str(content) + type_postfix )
+        return prefix + separator.join(inner_mojangson) + postfix
+
+    def tree(self,sort=None,indent='    ',level=0):
+        prefix = self.prefix[True]
+        separator = self.separator[True]
+        type_postfix = self.type_postfix[True]
+        postfix = self.postfix[True]
+
+        inner_mojangson = []
+        for content in self.value:
+            inner_mojangson.append( str(content) + type_postfix )
+
+        if len(inner_mojangson) <= 8:
+            result = prefix + separator.join(inner_mojangson) + postfix
+        else:
+            result = prefix + separator.join(inner_mojangson[:8]) + separator + '...(' + str(len(inner_mojangson)) + ' entries total)' + postfix
+
+        if level == 0:
+            print(result)
+        else:
+            return result
+
+    def has_path(self,path):
+        if path.startswith('['):
+            path = path[1:]
+        if not ']' in path:
+            return False
+        if path.find(']') + 1 != len(path):
+            return False
+        path = path[:-1]
+
+        index = -1
+        try:
+            index = int(path)
+        except:
+            return False
+
+        if index < 0 or index >= len(self.value):
+            return False
+
+        return True
 
     def at_path(self,path):
         if path.startswith('['):
@@ -184,37 +263,37 @@ class _ArrayTag(_Tag):
 
 class TagByte(_DataTag):
     fmt = 'b'
-    postfix = ('b',getColor('red','ansi')+'b'+getColor('reset','ansi'))
+    postfix = ('b',get_color('red','ansi')+'b'+get_color('reset','ansi'))
 
 
 class TagShort(_DataTag):
     fmt = 'h'
-    postfix = ('s',getColor('red','ansi')+'s'+getColor('reset','ansi'))
+    postfix = ('s',get_color('red','ansi')+'s'+get_color('reset','ansi'))
 
 
 class TagInt(_DataTag):
     fmt = 'i'
-    postfix = ('',getColor('reset','ansi'))
+    postfix = ('',get_color('reset','ansi'))
 
 
 class TagLong(_DataTag):
     fmt = 'q'
-    postfix = ('l',getColor('red','ansi')+'l'+getColor('reset','ansi'))
+    postfix = ('l',get_color('red','ansi')+'l'+get_color('reset','ansi'))
 
 
 class TagFloat(_DataTag):
     fmt = 'f'
-    postfix = ('f',getColor('red','ansi')+'f'+getColor('reset','ansi'))
+    postfix = ('f',get_color('red','ansi')+'f'+get_color('reset','ansi'))
 
 
 class TagDouble(_DataTag):
     fmt = 'd'
-    postfix = ('d',getColor('red','ansi')+'d'+getColor('reset','ansi'))
+    postfix = ('d',get_color('red','ansi')+'d'+get_color('reset','ansi'))
 
 
 class TagString(_Tag):
-    prefix = ('"',getColor('white','ansi')+'"'+getColor('green','ansi'))
-    postfix = ('"',getColor('reset','ansi')+getColor('white','ansi')+'"'+getColor('reset','ansi'))
+    prefix = ('"',get_color('white','ansi')+'"'+get_color('green','ansi'))
+    postfix = ('"',get_color('reset','ansi')+get_color('white','ansi')+'"'+get_color('reset','ansi'))
 
     @classmethod
     def from_buff(cls, buff):
@@ -228,45 +307,68 @@ class TagString(_Tag):
     def is_subset(self,other):
         return self.value == other.value
 
-    def to_json(self,sort=None,highlight=False):
+    def to_mojangson(self,sort=None,highlight=False):
+        prefix = self.prefix[highlight]
+        postfix = self.postfix[highlight]
+
         text = self.value.replace('\\','\\\\').replace('\n','\\n"').replace('"','\\"')
         if highlight:
-            text = ansifyText(text)
-        return self.prefix[highlight] + text + self.postfix[highlight]
+            text = ansify_text(text,show_section=True)
+        return prefix + text + postfix
+
+    def tree(self,sort=None,indent='    ',level=0):
+        prefix = self.prefix[True]
+        postfix = self.postfix[True]
+
+        text = self.value.replace('\\','\\\\').replace('\n','\\n"').replace('"','\\"')
+        text = ansify_text(text,show_section=True)
+        result = prefix + text + postfix
+
+        if level == 0:
+            print(result)
+        else:
+            return result
 
 
 class TagByteArray(_ArrayTag):
     fmt = 'b'
-    prefix = ('[B;',getColor('white','ansi')+'['+getColor('red','ansi')+'B'+getColor('white','ansi')+'; '+getColor('gold','ansi'))
-    postfix = ('b]',getColor('red','ansi')+'b'+getColor('white','ansi')+']'+getColor('reset','ansi'))
-    separator = ('b,',getColor('red','ansi')+'b'+getColor('white','ansi')+', '+getColor('gold','ansi'))
+    prefix = ('[B;',get_color('white','ansi')+'['+get_color('red','ansi')+'B'+get_color('white','ansi')+'; '+get_color('gold','ansi'))
+    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
+    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
+    type_postfix = ('b',get_color('red','ansi')+'b')
 
 
 class TagIntArray(_ArrayTag):
     fmt = 'i'
-    prefix = ('[I;',getColor('white','ansi')+'['+getColor('red','ansi')+'I'+getColor('white','ansi')+'; '+getColor('gold','ansi'))
-    postfix = (']',getColor('white','ansi')+']'+getColor('reset','ansi'))
-    separator = (',',getColor('white','ansi')+', '+getColor('gold','ansi'))
+    prefix = ('[I;',get_color('white','ansi')+'['+get_color('red','ansi')+'I'+get_color('white','ansi')+'; '+get_color('gold','ansi'))
+    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
+    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
+    type_postfix = ('','')
 
 
 class TagLongArray(_ArrayTag):
     fmt = 'q'
-    prefix = ('[L;',getColor('white','ansi')+'['+getColor('red','ansi')+'L'+getColor('white','ansi')+'; '+getColor('gold','ansi'))
-    postfix = ('l]',getColor('red','ansi')+'l'+getColor('white','ansi')+']'+getColor('reset','ansi'))
-    separator = ('l,',getColor('red','ansi')+'l'+getColor('white','ansi')+', '+getColor('gold','ansi'))
+    prefix = ('[L;',get_color('white','ansi')+'['+get_color('red','ansi')+'L'+get_color('white','ansi')+'; '+get_color('gold','ansi'))
+    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
+    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
+    type_postfix = ('l',get_color('red','ansi')+'l')
 
 
 class TagUnsignedLongArray(_ArrayTag):
     fmt = 'Q'
-    prefix = ('[L;',getColor('white','ansi')+'['+getColor('red','ansi')+'L'+getColor('white','ansi')+'; '+getColor('gold','ansi'))
-    postfix = ('l]',getColor('red','ansi')+'l'+getColor('white','ansi')+']'+getColor('reset','ansi'))
-    separator = ('l,',getColor('red','ansi')+'l'+getColor('white','ansi')+', '+getColor('gold','ansi'))
+    prefix = ('[L;',get_color('white','ansi')+'['+get_color('red','ansi')+'L'+get_color('white','ansi')+'; '+get_color('gold','ansi'))
+    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
+    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
+    type_postfix = ('l',get_color('red','ansi')+'l')
 
 
 class TagList(_Tag):
-    prefix = ('[',getColor('white','ansi')+'['+getColor('gold','ansi'))
-    postfix = (']',getColor('white','ansi')+']'+getColor('reset','ansi'))
-    separator = (',',getColor('white','ansi')+', '+getColor('gold','ansi'))
+    prefix = ('[',get_color('white','ansi')+'['+get_color('gold','ansi'))
+    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
+    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
+
+    def __len__(self):
+        return len(self.value)
 
     @classmethod
     def from_buff(cls, buff):
@@ -294,19 +396,63 @@ class TagList(_Tag):
                 return False
         return True
 
-    def to_json(self,sort=None,highlight=False):
-        content_json = []
+    def to_mojangson(self,sort=None,highlight=False):
+        prefix = self.prefix[highlight]
+        separator = self.separator[highlight]
+        postfix = self.postfix[highlight]
+
+        inner_mojangson = []
         for content in self.value:
-            content_json.append(content.to_json(sort,highlight))
-        return self.prefix[highlight] + self.separator[highlight].join(content_json) + self.postfix[highlight]
+            inner_mojangson.append(content.to_mojangson(sort,highlight))
+        return prefix + separator.join(inner_mojangson) + postfix
+
+    def tree(self,sort=None,indent='    ',level=0):
+        prefix = self.prefix[True] + '\n'
+        separator = self.separator[True] + '\n'
+        postfix = indent*level + self.postfix[True]
+
+        inner_mojangson = []
+        for content in self.value:
+            inner_mojangson.append( indent*(level+1) + content.tree(sort,indent,level+1) )
+
+        if len(inner_mojangson) == 0:
+            result = prefix + postfix
+        else:
+            result = prefix + separator.join(inner_mojangson) + '\n' + postfix
+
+        if level == 0:
+            print(result)
+        else:
+            return result
+
+    def has_path(self,path):
+        if path.startswith('['):
+            path = path[1:]
+        if not ']' in path:
+            return False
+
+        split_index = path.find(']')
+        array_index = path[:split_index]
+        path = path[split_index+1:]
+
+        try:
+            array_index = int(array_index)
+        except:
+            return False
+
+        if array_index < 0 or array_index >= len(self.value):
+            return False
+
+        if path == '':
+            return True
+        else:
+            return self.value[array_index].has_path(path)
 
     def at_path(self,path):
         if path.startswith('['):
             path = path[1:]
         if not ']' in path:
             raise IndexError( '] not in path "' + path + '"' )
-        if ']' not in path:
-            raise IndexError( 'Could not find "]" in "' + path + '"' )
 
         split_index = path.find(']')
         array_index = path[:split_index]
@@ -325,13 +471,14 @@ class TagList(_Tag):
         else:
             return self.value[array_index].at_path(path)
 
+
 class TagCompound(_Tag):
     root = False
     preserve_order = False
-    prefix = ('{',getColor('white','ansi')+'{'+getColor('gold','ansi'))
-    postfix = ('}',getColor('white','ansi')+'}'+getColor('reset','ansi'))
-    separator = (',',getColor('white','ansi')+', '+getColor('gold','ansi'))
-    key_value_separator = (':',getColor('white','ansi')+': ')
+    prefix = ('{',get_color('white','ansi')+'{'+get_color('gold','ansi'))
+    postfix = ('}',get_color('white','ansi')+'}'+get_color('reset','ansi'))
+    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
+    key_value_separator = (':',get_color('white','ansi')+': ')
 
     @classmethod
     def from_buff(cls, buff):
@@ -398,27 +545,64 @@ class TagCompound(_Tag):
                 return False
         return True
 
-    def to_json(self,sort=None,highlight=False):
+    def to_mojangson(self,sort=None,highlight=False):
+        prefix = self.prefix[highlight]
+        key_value_separator = self.key_value_separator[highlight]
+        separator = self.separator[highlight]
+        postfix = self.postfix[highlight]
+
         if type(sort) in (list,tuple):
             keys = []
             for key in sort:
                 if key in self.value.keys():
                     keys.append(key)
-            for key in self.value.keys():
+            for key in sorted(self.value.keys()):
                 if key not in sort:
                     keys.append(key)
         else:
             keys = self.value.keys()
 
-        content_json = []
+        inner_mojangson = []
         for key in keys:
             content = self.value[key]
-            content_json.append( key + self.key_value_separator[highlight] + content.to_json(sort,highlight) )
-        return self.prefix[highlight] + self.separator[highlight].join(content_json) + self.postfix[highlight]
+            inner_mojangson.append( key + key_value_separator + content.to_mojangson(sort,highlight) )
+        return prefix + separator.join(inner_mojangson) + postfix
 
-    def at_path(self,path):
+    def tree(self,sort=None,indent='    ',level=0):
+        prefix = self.prefix[True] + '\n'
+        key_value_separator = self.key_value_separator[True]
+        separator = self.separator[True] + '\n'
+        postfix = indent*level + self.postfix[True]
+
+        if type(sort) in (list,tuple):
+            keys = []
+            for key in sort:
+                if key in self.value.keys():
+                    keys.append(key)
+            for key in sorted(self.value.keys()):
+                if key not in sort:
+                    keys.append(key)
+        else:
+            keys = self.value.keys()
+
+        inner_mojangson = []
+        for key in keys:
+            content = self.value[key]
+            inner_mojangson.append( indent*(level+1) + key + key_value_separator + content.tree(sort,indent,level+1) )
+
+        if len(inner_mojangson) == 0:
+            result = prefix + postfix
+        else:
+            result = prefix + separator.join(inner_mojangson) + '\n' + postfix
+
+        if level == 0:
+            print(result)
+        else:
+            return result
+
+    def has_path(self,path):
         if path.startswith('.') or path.startswith('['):
-            raise KeyError( path + 'not in ' + str(self) )
+            return False
         split_index = len(path)
         bracket_index = path.find('[')
         dot_index = path.find('.')
@@ -431,129 +615,240 @@ class TagCompound(_Tag):
         key = path[:split_index]
         path = path[split_index+1:]
         if key not in self.value:
-            raise KeyError( 'key "' + key + '" not in ' + str(self) )
+            return False
+
+        if path == '':
+            return True
+        else:
+            return self.value[key].has_path(path)
+
+    def at_path(self,path):
+        if path.startswith('.') or path.startswith('['):
+            raise KeyError( path + 'not in ' + str(self.value.keys()) )
+        split_index = len(path)
+        bracket_index = path.find('[')
+        dot_index = path.find('.')
+
+        if dot_index >= 0:
+            split_index = min(split_index,dot_index)
+        if bracket_index >= 0:
+            split_index = min(split_index,bracket_index)
+
+        key = path[:split_index]
+        path = path[split_index+1:]
+        if key not in self.value:
+            raise KeyError( 'key "' + key + '" not in ' + str(self.value.keys()) )
 
         if path == '':
             return self.value[key]
         else:
             return self.value[key].at_path(path)
 
-'''
     @classmethod
-    def from_json(cls,json):
+    def from_mojangson(cls,json):
         """
-        Convert a json-style NBT string into NBT
+        Convert a Mojangson string into NBT
         """
-        debug = ''
-        startQuote = None
-        charsToIgnore = 0
-
-        def next_type(json):
-            best = None
-            best_pre = ''
-            for kind in _kinds.values():
-                if (
-                    'prefix' not in dir(kind) or
-                    len(kind.prefix[0]) == 0 or
-                    not json.startswith(kind.prefix[0]) or
-                    len(kind.prefix[0]) < len(best_pre)
-                ):
-                    continue
-                best = kind
-                best_pre = kind.prefix[0]
-            return(best)
-
-        class parse_state(object):
+        class BrigadierStringReader(object):
             """
-            The state of the current value being parsed;
-            used to simplify adding values to tags, or
-            to finish adding values to a tag.
+            Python implementation of:
+            https://github.com/Mojang/brigadier/blob/master/src/main/java/com/mojang/brigadier/StringReader.java
             """
-            def __init__(self):
-                self.next_name = ''
-                self.next_value = None
-                self.result = TagCompound({})
-                self.stack = [self.result]
+            regexUnquotedString = re.compile(r'''[-+._0-9A-Za-z]''')
 
-            def store_tag(self):
-                # Add current tag to the parent tag
-                parent = self.stack[-1]
-                if type(parent) is TagCompound:
-                    # parent is TagCompound
-                    parent[self.next_name] = self.next_value
-
-                elif type(parent) is TagList:
-                    # parent is TagList
-                    parent.append(self.next_value)
-
-                elif isinstance(tag, _ArrayTag):
-                    # parent is a numeric array
-                    parent.append(self.next_value.value)
-
+            def __init__(self,stringIn):
+                if type(stringIn) == str:
+                    self.string = stringIn
+                    self.cursor = 0
+                elif type(stringIn) == type(self):
+                    self.string = stringIn.string
+                    self.cursor = stringIn.cursor
                 else:
-                    raise TypeError("Unexpected parent data type while parsing NBT json")
+                    raise TypeError('BrigadierStringReader cannot parse type ' + str(type(stringIn)))
 
-                # Add new tag to stack if it's a container
-                child = self.next_value
-                if (
-                    type(child) is TagCompound or
-                    type(child) is TagList or
-                    isinstance(tag, _ArrayTag)
-                ):
-                    self.stack.append(child)
+            def getString(self):
+                return self.string
 
-                # Reset current tag state
-                self.next_name = ''
-                self.next_value = None
+            def setCursor(self,cursor):
+                self.cursor = cursor
 
-        state = parse_state()
+            def getRemainingLength(self):
+                return len(self.string) - self.cursor
 
-        # Begin parse
-        for i,c in enumerate(json):
-            # i is the index of character c in json
-            if charsToIgnore > 0:
-                debug += c
-                charsToIgnore -= 1
-                continue
-            elif c == '\\':
-                # This charcter is a \, ignore next character
-                debug += '\\'
-                charsToIgnore = 1
-                continue
-            elif c == '"':
-                # Quote found, is it start or end?
-                debug += '"'
-                if startQuote is not None:
-                    # It is an end quote, accept the value
-                    # Include the quote marks to identify type
+            def getTotalLength(self):
+                return len(self.string)
 
-                    # Note that this might in fact be the tag NAME,
-                    # not the tag VALUE. This will be updated when a
-                    # colon signifies the value starts next, or when
-                    # it is clear the end of the tag has arrived.
-                    cls.currentValue = json[startQuote: i + 1]
-                    startQuote = None
-                    continue
+            def __len__(self):
+                return len(self.string)
+
+            def getCursor(self):
+                return self.cursor
+
+            def getRead(self):
+                """
+                Return the part of the source string that's already been read
+                """
+                return self.string[:self.cursor]
+
+            def getRemaining(self):
+                return self.string[self.cursor:]
+
+            def canRead(self,length=1):
+                return cursor + length <= len(self.string)
+
+            def peek(self,offset=0):
+                return self.string[self.cursor+offset]
+
+            def read(self):
+                self.cursor += 1
+                return self.string[self.cursor-1]
+
+            def skip(self):
+                self.cursor += 1
+
+            def isAllowedNumber(self,c):
+                return c in '0123456789-.'
+
+            def skipWhitespace(self):
+                while self.canRead() and self.peek().isspace():
+                    self.skip()
+
+            def readInt(self):
+                start = self.cursor
+                while self.canRead() and self.isAllowedNumber(self.peek()):
+                    self.skip()
+                number = self.string[start:self.cursor]
+                if len(number) == 0:
+                    raise SyntaxError("could not find an integer: end of string, or first character not in [-.0-9]")
+                try:
+                    if -1*(2**31) > int(number) or int(number) >= 2**31:
+                        raise ValueError()
+                    return int(number)
+                except ValueError:
+                    cursor = start
+                    raise ValueError("could not parse '" + number + "' as a 32-bit integer expressed in base 10")
+
+            def readLong(self):
+                start = self.cursor
+                while self.canRead() and self.isAllowedNumber(self.peek()):
+                    self.skip()
+                number = self.string[start:self.cursor]
+                if len(number) == 0:
+                    raise SyntaxError("could not find a long: end of string, or first character not in [-.0-9]")
+                try:
+                    if -1*(2**63) > int(number) or int(number) >= 2**63:
+                        raise ValueError()
+                    return int(number)
+                except ValueError:
+                    cursor = start
+                    raise ValueError("could not parse '" + number + "' as a 64-bit integer expressed in base 10")
+
+            def readDouble(self):
+                start = self.cursor
+                while self.canRead() and self.isAllowedNumber(self.peek()):
+                    self.skip()
+                number = self.string[start:self.cursor]
+                if len(number) == 0:
+                    raise SyntaxError("could not find a double: end of string, or first character not in [-.0-9]")
+                try:
+                    return float(number)
+                except ValueError:
+                    cursor = start
+                    raise ValueError("could not parse '" + number + "' as a 64-bit IEEE double-precision float expresssed in base 10")
+
+            def readFloat(self):
+                start = self.cursor
+                while self.canRead() and self.isAllowedNumber(self.peek()):
+                    self.skip()
+                number = self.string[start:self.cursor]
+                if len(number) == 0:
+                    raise SyntaxError("could not find a float: end of string, or first character not in [-.0-9]")
+                try:
+                    if abs(float(number)) >= 2.0**128:
+                        # This number exceeds the range of a 32-bit IEEE float
+                        raise ValueError()
+                    return float(number)
+                except ValueError:
+                    cursor = start
+                    raise ValueError("could not parse '" + number + "' as a 32-bit IEEE float expresssed in base 10")
+
+            def isAllowedInUnquotedString(self,c):
+                return bool(self.regexUnquotedString.match(c))
+
+            def readUnquotedString(self):
+                start = self.cursor
+                while self.canRead() and self.isAllowedInUnquotedString(self.peek()):
+                    self.skip()
+                return self.string[start:self.cursor]
+
+            def readQuotedString(self):
+                if not self.canRead():
+                    return ""
+                elif self.peek() != '"':
+                    raise SyntaxError("enexpected start of quote")
+                self.skip()
+                result = ''
+                escaped = False
+                while self.canRead():
+                    c = self.read()
+                    if escaped:
+                        if c in '"\\':
+                            result += c
+                            escaped = False
+                        else:
+                            self.cursor -= 1
+                            raise SyntaxError("Unexpected escaped character '" + c + "'")
+                        if c == '\\':
+                            escaped = True
+                        elif c == '"':
+                            return result
+                        else:
+                            result += c
+
+                raise SyntaxError("expected end quote")
+
+            def readString(self):
+                if self.canRead() and self.peek == '"':
+                    return self.readQuotedString()
                 else:
-                    # It is a start quote, record the location
-                    debug += '"'
-                    startQuote = i
-                    continue
-            elif startQuote is not None:
-                # We're inside quotes; other cases should be ignored.
-                debug += '~'
-                continue
-            elif c == '{':
-                # New compound tag
-                if i == 0:
-                    # This is the starting tag, and accounted for.
-                    debug += '{'
-                    continue
+                    return self.readUnquotedString()
+
+            def readBoolean(self):
+                start = self.cursor
+                value = self.readString()
+                if len(value) == 0:
+                    raise SyntaxError("expected boolean")
+                if value == "true":
+                    return True
+                elif value == "false":
+                    return False
                 else:
-                    # This tag is not accounted for.
-                    debug += '{'
-                    #
-'''
+                    self.cursor = start
+                    raise SyntaxError("invalid boolean")
+
+            def expect(self,c):
+                if not self.canRead() or self.peek() != c:
+                    raise SyntaxError("Expected character " + str(c))
+                self.skip()
+
+        class MojangsonParser(object):
+            """
+            Convert MojangSON such as {display:{Name:"{\"text\":\"Excaliber\"}"}}
+            into Quarry's NBT format
+            """
+
+            regexFloat          = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.]?)(?:e[-+]?[0-9]+)?f''')
+            regexDouble         = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.]?)(?:e[-+]?[0-9]+)?d''')
+            regexDoubleNoSuffix = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.])(?:e[-+]?[0-9]+)?''')
+            regexByte           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)b''')
+            regexShort          = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)s''')
+            regexInt            = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)''')
+            regexLong           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)l''')
+
+            def __init__(self,stringReader):
+                self.stringReader = stringReader
+                # TODO HERE (Tim uses this comment to get back to his last edit point)
+
 
 class TagRoot(TagCompound):
     root = True
