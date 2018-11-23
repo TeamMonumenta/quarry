@@ -4,6 +4,7 @@ import gzip
 import time
 import zlib
 
+from brigadier.string_reader import StringReader
 from quarry.types.buffer import Buffer
 
 _kinds = {}
@@ -219,7 +220,9 @@ class _ArrayTag(_Tag):
             return result
 
     def has_path(self,path):
-        if path.startswith('['):
+        if not isinstance(path,StringReader):
+            path = StringReader(path)
+        if path.peek() == '[':
             path = path[1:]
         if not ']' in path:
             return False
@@ -649,188 +652,6 @@ class TagCompound(_Tag):
         """
         Convert a Mojangson string into NBT
         """
-        class BrigadierStringReader(object):
-            """
-            Python implementation of:
-            https://github.com/Mojang/brigadier/blob/master/src/main/java/com/mojang/brigadier/StringReader.java
-            """
-            regexUnquotedString = re.compile(r'''[-+._0-9A-Za-z]''')
-
-            def __init__(self,stringIn):
-                if type(stringIn) == str:
-                    self.string = stringIn
-                    self.cursor = 0
-                elif type(stringIn) == type(self):
-                    self.string = stringIn.string
-                    self.cursor = stringIn.cursor
-                else:
-                    raise TypeError('BrigadierStringReader cannot parse type ' + str(type(stringIn)))
-
-            def getString(self):
-                return self.string
-
-            def setCursor(self,cursor):
-                self.cursor = cursor
-
-            def getRemainingLength(self):
-                return len(self.string) - self.cursor
-
-            def getTotalLength(self):
-                return len(self.string)
-
-            def __len__(self):
-                return len(self.string)
-
-            def getCursor(self):
-                return self.cursor
-
-            def getRead(self):
-                """
-                Return the part of the source string that's already been read
-                """
-                return self.string[:self.cursor]
-
-            def getRemaining(self):
-                return self.string[self.cursor:]
-
-            def canRead(self,length=1):
-                return cursor + length <= len(self.string)
-
-            def peek(self,offset=0):
-                return self.string[self.cursor+offset]
-
-            def read(self):
-                self.cursor += 1
-                return self.string[self.cursor-1]
-
-            def skip(self):
-                self.cursor += 1
-
-            def isAllowedNumber(self,c):
-                return c in '0123456789-.'
-
-            def skipWhitespace(self):
-                while self.canRead() and self.peek().isspace():
-                    self.skip()
-
-            def readInt(self):
-                start = self.cursor
-                while self.canRead() and self.isAllowedNumber(self.peek()):
-                    self.skip()
-                number = self.string[start:self.cursor]
-                if len(number) == 0:
-                    raise SyntaxError("could not find an integer: end of string, or first character not in [-.0-9]")
-                try:
-                    if -1*(2**31) > int(number) or int(number) >= 2**31:
-                        raise ValueError()
-                    return int(number)
-                except ValueError:
-                    cursor = start
-                    raise ValueError("could not parse '" + number + "' as a 32-bit integer expressed in base 10")
-
-            def readLong(self):
-                start = self.cursor
-                while self.canRead() and self.isAllowedNumber(self.peek()):
-                    self.skip()
-                number = self.string[start:self.cursor]
-                if len(number) == 0:
-                    raise SyntaxError("could not find a long: end of string, or first character not in [-.0-9]")
-                try:
-                    if -1*(2**63) > int(number) or int(number) >= 2**63:
-                        raise ValueError()
-                    return int(number)
-                except ValueError:
-                    cursor = start
-                    raise ValueError("could not parse '" + number + "' as a 64-bit integer expressed in base 10")
-
-            def readDouble(self):
-                start = self.cursor
-                while self.canRead() and self.isAllowedNumber(self.peek()):
-                    self.skip()
-                number = self.string[start:self.cursor]
-                if len(number) == 0:
-                    raise SyntaxError("could not find a double: end of string, or first character not in [-.0-9]")
-                try:
-                    return float(number)
-                except ValueError:
-                    cursor = start
-                    raise ValueError("could not parse '" + number + "' as a 64-bit IEEE double-precision float expresssed in base 10")
-
-            def readFloat(self):
-                start = self.cursor
-                while self.canRead() and self.isAllowedNumber(self.peek()):
-                    self.skip()
-                number = self.string[start:self.cursor]
-                if len(number) == 0:
-                    raise SyntaxError("could not find a float: end of string, or first character not in [-.0-9]")
-                try:
-                    if abs(float(number)) >= 2.0**128:
-                        # This number exceeds the range of a 32-bit IEEE float
-                        raise ValueError()
-                    return float(number)
-                except ValueError:
-                    cursor = start
-                    raise ValueError("could not parse '" + number + "' as a 32-bit IEEE float expresssed in base 10")
-
-            def isAllowedInUnquotedString(self,c):
-                return bool(self.regexUnquotedString.match(c))
-
-            def readUnquotedString(self):
-                start = self.cursor
-                while self.canRead() and self.isAllowedInUnquotedString(self.peek()):
-                    self.skip()
-                return self.string[start:self.cursor]
-
-            def readQuotedString(self):
-                if not self.canRead():
-                    return ""
-                elif self.peek() != '"':
-                    raise SyntaxError("enexpected start of quote")
-                self.skip()
-                result = ''
-                escaped = False
-                while self.canRead():
-                    c = self.read()
-                    if escaped:
-                        if c in '"\\':
-                            result += c
-                            escaped = False
-                        else:
-                            self.cursor -= 1
-                            raise SyntaxError("Unexpected escaped character '" + c + "'")
-                        if c == '\\':
-                            escaped = True
-                        elif c == '"':
-                            return result
-                        else:
-                            result += c
-
-                raise SyntaxError("expected end quote")
-
-            def readString(self):
-                if self.canRead() and self.peek == '"':
-                    return self.readQuotedString()
-                else:
-                    return self.readUnquotedString()
-
-            def readBoolean(self):
-                start = self.cursor
-                value = self.readString()
-                if len(value) == 0:
-                    raise SyntaxError("expected boolean")
-                if value == "true":
-                    return True
-                elif value == "false":
-                    return False
-                else:
-                    self.cursor = start
-                    raise SyntaxError("invalid boolean")
-
-            def expect(self,c):
-                if not self.canRead() or self.peek() != c:
-                    raise SyntaxError("Expected character " + str(c))
-                self.skip()
-
         class MojangsonParser(object):
             """
             Convert MojangSON such as {display:{Name:"{\"text\":\"Excaliber\"}"}}
@@ -845,8 +666,8 @@ class TagCompound(_Tag):
             regexInt            = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)''')
             regexLong           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)l''')
 
-            def __init__(self,stringReader):
-                self.stringReader = stringReader
+            def __init__(self,string_reader):
+                self.string_reader = string_reader
                 # TODO HERE (Tim uses this comment to get back to his last edit point)
 
 
@@ -966,10 +787,30 @@ class RegionFile(object):
         self.fd.seek(4096 * extents[-1][0])
         self.fd.truncate()
 
+    def list_chunks(self):
+        """
+        Returns a list of (cx,cz) tuples for all existing chunks.
+        """
+
+        result = []
+
+        for chunk_z in range(32):
+            for chunk_x in range(32):
+                # Read extent header
+                self.fd.seek(4 * (32 * chunk_z + chunk_x))
+                entry = Buffer(self.fd.read(4)).unpack('I')
+
+                if entry:
+                    result.append( ( chunk_x, chunk_z ) )
+
+        return result
+
+
     def load_chunk(self, chunk_x, chunk_z):
         """
         Loads the chunk at the given co-ordinates from the region file.
         The co-ordinates should range from 0 to 31. Returns a ``TagRoot``.
+        If no chunk is found, returns None.
         """
 
         buff = Buffer()
@@ -980,13 +821,17 @@ class RegionFile(object):
         entry = buff.unpack('I')
         chunk_offset, chunk_length = entry >> 8, entry & 0xFF
 
-        # Read chunk
-        self.fd.seek(4096 * chunk_offset)
-        buff.add(self.fd.read(4096 * chunk_length))
-        chunk = buff.read(buff.unpack('IB')[0])
-        chunk = zlib.decompress(chunk)
-        chunk = TagRoot.from_bytes(chunk)
-        return chunk
+        if entry:
+            # Read chunk
+            self.fd.seek(4096 * chunk_offset)
+            buff.add(self.fd.read(4096 * chunk_length))
+            chunk = buff.read(buff.unpack('IB')[0])
+            chunk = zlib.decompress(chunk)
+            chunk = TagRoot.from_bytes(chunk)
+            return chunk
+        else:
+            # No chunk at that location
+            return None
 
 
 # Debug -----------------------------------------------------------------------
