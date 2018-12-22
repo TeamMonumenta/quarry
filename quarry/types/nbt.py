@@ -831,10 +831,11 @@ class TagCompound(_Tag):
                         new_type = type(new_value)
 
                         if new_type != item_type:
-                            self.reader.setCursor(i)
+                            self.reader.setCursor(orig_pos)
                             self.raise_error("Mixed types in list! " + str(item_type) + " != " + str(new_type))
 
-                        array.append(new_value)
+                        # Important! Numeric arrays just contain numbers! (i.e. not an array of TagInt)
+                        array.append(new_value.value)
 
                         if self.seek_to_next_comma_delim_element():
                             if not self.reader.canRead():
