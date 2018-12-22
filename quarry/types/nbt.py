@@ -670,15 +670,25 @@ class TagCompound(_Tag):
             def __init__(self, json):
                 self.reader = StringReader(json)
 
-            def parseKeyString(self):
+                #########################################################
+                # Set to True for verbose parsing - useful to find errors
+                self.debug = False
+
+            def parse_key_string(self):
+                if self.debug:
+                    print("parse_key_string")
+
                 self.reader.skipWhitespace()
                 if not self.reader.canRead():
                     self.raise_error("Failed to parse TagCompound key")
                 else:
-                    return self.reader.readString();
+                    return self.reader.readString()
 
             # TODO: Need to check these sizes correctly!
             def parse_literal(self, literal_str):
+                if self.debug:
+                    print("parse_literal")
+
                 if self.regexFloat.match(literal_str):
                     return TagFloat(float(literal_str[:-1]))
 
@@ -709,26 +719,32 @@ class TagCompound(_Tag):
                 return TagString(literal_str)
 
             def parse_literal_or_string(self):
-                self.reader.skipWhitespace();
-                orig_pos = self.reader.getCursor();
+                if self.debug:
+                    print("parse_literal_or_string")
+
+                self.reader.skipWhitespace()
+                orig_pos = self.reader.getCursor()
 
                 if self.reader.peek() == '"':
-                    return TagString(self.reader.readQuotedString());
+                    return TagString(self.reader.readQuotedString())
                 else:
-                    val = self.reader.readUnquotedString();
+                    val = self.reader.readUnquotedString()
 
                     if not val:
-                        self.reader.setCursor(i);
+                        self.reader.setCursor(i)
                         self.raise_error("Failed to parse literal or string value")
                     else:
-                        return self.parse_literal(val);
+                        return self.parse_literal(val)
 
             def parse_any_tag(self):
-                self.reader.skipWhitespace();
+                if self.debug:
+                    print("parse_any_tag")
+
+                self.reader.skipWhitespace()
                 if not self.reader.canRead():
                     self.raise_error("Failed while parsing value")
                 else:
-                    nextChar = self.reader.peek();
+                    nextChar = self.reader.peek()
                     if nextChar == '{':
                         return self.parse_compound()
                     else:
@@ -738,14 +754,20 @@ class TagCompound(_Tag):
                             return self.parse_literal_or_string()
 
             def parse_array(self):
+                if self.debug:
+                    print("parse_array")
+
                 if self.reader.canRead(3) and self.reader.peek(1) != '"' and self.reader.peek(2) == ';':
                     return self.parse_typed_numeric_array()
                 else:
-                    return self.parse_non_numeric_array();
+                    return self.parse_non_numeric_array()
 
             def parse_non_numeric_array(self):
-                self.advance_and_fail_if_next_is_not('[');
-                self.reader.skipWhitespace();
+                if self.debug:
+                    print("parse_non_numeric_array")
+
+                self.advance_and_fail_if_next_is_not('[')
+                self.reader.skipWhitespace()
                 if not self.reader.canRead():
                     self.raise_error("Failed to parse non-numeric array")
                 else:
@@ -753,63 +775,124 @@ class TagCompound(_Tag):
                     item_type = None
 
                     while self.reader.peek() != ']':
-                        orig_pos = self.reader.getCursor();
-                        new_value = self.parse_any_tag();
+                        orig_pos = self.reader.getCursor()
+                        new_value = self.parse_any_tag()
                         new_type = type(new_value)
-                        print(new_type)
 
                         if not item_type:
-                            item_type = new_type;
+                            item_type = new_type
                         elif item_type != new_type:
                             self.reader.setCursor(orig_pos)
                             self.raise_error("Mixed types in list! " + str(item_type) + " != " + str(new_type))
 
-                        nbt_list.append(new_value);
+                        nbt_list.append(new_value)
                         if not self.seek_to_next_comma_delim_element():
-                            break;
+                            break
 
                         if not self.reader.canRead():
                             self.raise_error("Unexpected end of array")
 
-                    self.advance_and_fail_if_next_is_not(']');
-                    return TagList(nbt_list);
+                    self.advance_and_fail_if_next_is_not(']')
+                    return TagList(nbt_list)
+
+            def parse_typed_numeric_array(self):
+                if self.debug:
+                    print("parse_typed_numeric_array")
+
+                self.advance_and_fail_if_next_is_not('[')
+                orig_pos = self.reader.getCursor()
+                first_char = self.reader.read()
+
+                # Read ;
+                self.reader.read()
+                self.reader.skipWhitespace()
+                if not self.reader.canRead():
+                    self.raise_error("Unexpected end of numeric array")
+                elif first_char == 'B':
+                    return TagByteArray(self.parse_numeric_array_as_type(TagByte))
+                elif first_char == 'L':
+                    return TagLongArray(self.parse_numeric_array_as_type(TagLong))
+                elif first_char == 'I':
+                    return TagIntArray(self.parse_numeric_array_as_type(TagInt))
+                else:
+                    self.reader.setCursor(orig_pos)
+                    self.raise_error("Unexpected type character '" + first_char + "' in numeric array")
+
+            def parse_numeric_array_as_type(self, item_type):
+                if self.debug:
+                    print("parse_numeric_array_as_type")
+
+                array = []
+
+                while True:
+                    if self.reader.peek() != ']':
+                        orig_pos = self.reader.getCursor()
+                        new_value = self.parse_any_tag()
+                        new_type = type(new_value)
+
+                        if new_type != item_type:
+                            self.reader.setCursor(i)
+                            self.raise_error("Mixed types in list! " + str(item_type) + " != " + str(new_type))
+
+                        array.append(new_value)
+
+                        if self.seek_to_next_comma_delim_element():
+                            if not self.reader.canRead():
+                                self.raise_error("Unexpected end of numeric array elements")
+                            continue
+
+                    self.advance_and_fail_if_next_is_not(']')
+                    return array
 
             def parse_compound(self):
-                self.advance_and_fail_if_next_is_not('{');
+                if self.debug:
+                    print("parse_compound")
+
+                self.advance_and_fail_if_next_is_not('{')
                 compound = collections.OrderedDict()
 
                 self.reader.skipWhitespace()
 
                 while self.reader.canRead() and self.reader.peek() != '}':
-                    orig_pos = self.reader.getCursor();
-                    key = self.parseKeyString();
+                    orig_pos = self.reader.getCursor()
+                    key = self.parse_key_string()
 
                     if not key:
-                        self.reader.setCursor(orig_pos);
+                        self.reader.setCursor(orig_pos)
                         self.raise_error("Failed to parse TagCompound key")
 
-                    self.advance_and_fail_if_next_is_not(':');
-                    compound[key] = self.parse_any_tag();
+                    self.advance_and_fail_if_next_is_not(':')
+
+                    if self.debug:
+                        print("Parsing value of '" + key + "' - value: '" + self.reader.string[self.reader.cursor:] + "'")
+
+                    compound[key] = self.parse_any_tag()
                     if not self.seek_to_next_comma_delim_element():
-                        break;
+                        break
 
                     if not self.reader.canRead():
                         self.raise_error("Failed to parse TagCompound element")
 
-                self.advance_and_fail_if_next_is_not('}');
-                return TagCompound(compound);
+                self.advance_and_fail_if_next_is_not('}')
+                return TagCompound(compound)
 
 
             def seek_to_next_comma_delim_element(self):
-                self.reader.skipWhitespace();
+                if self.debug:
+                    print("seek_to_next_comma_delim_element")
+
+                self.reader.skipWhitespace()
                 if self.reader.canRead() and self.reader.peek() == ',':
-                    self.reader.skip();
-                    self.reader.skipWhitespace();
-                    return True;
+                    self.reader.skip()
+                    self.reader.skipWhitespace()
+                    return True
                 else:
-                    return False;
+                    return False
 
             def advance_and_fail_if_next_is_not(self, char):
+                if self.debug:
+                    print("advance_and_fail_if_next_is_not: '" + char + "'")
+
                 self.reader.skipWhitespace()
                 self.reader.expect(char)
 
