@@ -3,6 +3,7 @@ import functools
 import gzip
 import time
 import zlib
+import re
 
 from brigadier.string_reader import StringReader
 from quarry.types.buffer import Buffer
@@ -648,7 +649,7 @@ class TagCompound(_Tag):
             return self.value[key].at_path(path)
 
     @classmethod
-    def from_mojangson(cls,json):
+    def from_mojangson(cls, json):
         """
         Convert a Mojangson string into NBT
         """
@@ -658,18 +659,164 @@ class TagCompound(_Tag):
             into Quarry's NBT format
             """
 
-            regexFloat          = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.]?)(?:e[-+]?[0-9]+)?f''')
-            regexDouble         = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.]?)(?:e[-+]?[0-9]+)?d''')
-            regexDoubleNoSuffix = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.])(?:e[-+]?[0-9]+)?''')
-            regexByte           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)b''')
-            regexShort          = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)s''')
-            regexInt            = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)''')
-            regexLong           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)l''')
+            regexFloat          = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.]?)(?:e[-+]?[0-9]+)?f$''', re.IGNORECASE)
+            regexDouble         = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.]?)(?:e[-+]?[0-9]+)?d$''', re.IGNORECASE)
+            regexDoubleNoSuffix = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.])(?:e[-+]?[0-9]+)?$''', re.IGNORECASE)
+            regexByte           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)b$''', re.IGNORECASE)
+            regexShort          = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)s$''', re.IGNORECASE)
+            regexInt            = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)$''', re.IGNORECASE)
+            regexLong           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)l$''', re.IGNORECASE)
 
-            def __init__(self,string_reader):
-                self.string_reader = string_reader
-                # TODO HERE (Tim uses this comment to get back to his last edit point)
+            def __init__(self, json):
+                self.reader = StringReader(json)
 
+            def parseKeyString(self):
+                self.reader.skipWhitespace()
+                if not self.reader.canRead():
+                    self.raise_error("Failed to parse TagCompound key")
+                else:
+                    return self.reader.readString();
+
+            # TODO: Need to check these sizes correctly!
+            def parse_literal(self, literal_str):
+                if self.regexFloat.match(literal_str):
+                    return TagFloat(float(literal_str[:-1]))
+
+                if self.regexByte.match(literal_str):
+                    return TagByte(int(literal_str[:-1]))
+
+                if self.regexLong.match(literal_str):
+                    return TagLong(int(literal_str[:-1]))
+
+                if self.regexShort.match(literal_str):
+                    return TagShort(int(literal_str[:-1]))
+
+                if self.regexInt.match(literal_str):
+                    return TagInt(int(literal_str))
+
+                if self.regexDouble.match(literal_str):
+                    return TagDouble(float(literal_str[:-1]))
+
+                if self.regexDoubleNoSuffix.match(literal_str):
+                    return TagDouble(float(literal_str))
+
+                if "true" == literal_str.lower():
+                    return TagByte(1)
+
+                if "false" == literal_str.lower():
+                    return TagByte(0)
+
+                return TagString(literal_str)
+
+            def parse_literal_or_string(self):
+                self.reader.skipWhitespace();
+                orig_pos = self.reader.getCursor();
+
+                if self.reader.peek() == '"':
+                    return TagString(self.reader.readQuotedString());
+                else:
+                    val = self.reader.readUnquotedString();
+
+                    if not val:
+                        self.reader.setCursor(i);
+                        self.raise_error("Failed to parse literal or string value")
+                    else:
+                        return self.parse_literal(val);
+
+            def parse_any_tag(self):
+                self.reader.skipWhitespace();
+                if not self.reader.canRead():
+                    self.raise_error("Failed while parsing value")
+                else:
+                    nextChar = self.reader.peek();
+                    if nextChar == '{':
+                        return self.parse_compound()
+                    else:
+                        if nextChar == '[':
+                            return self.parse_array()
+                        else:
+                            return self.parse_literal_or_string()
+
+            def parse_array(self):
+                if self.reader.canRead(3) and self.reader.peek(1) != '"' and self.reader.peek(2) == ';':
+                    return self.parse_typed_numeric_array()
+                else:
+                    return self.parse_non_numeric_array();
+
+            def parse_non_numeric_array(self):
+                self.advance_and_fail_if_next_is_not('[');
+                self.reader.skipWhitespace();
+                if not self.reader.canRead():
+                    self.raise_error("Failed to parse non-numeric array")
+                else:
+                    nbt_list = []
+                    item_type = None
+
+                    while self.reader.peek() != ']':
+                        orig_pos = self.reader.getCursor();
+                        new_value = self.parse_any_tag();
+                        new_type = type(new_value)
+                        print(new_type)
+
+                        if not item_type:
+                            item_type = new_type;
+                        elif item_type != new_type:
+                            self.reader.setCursor(orig_pos)
+                            self.raise_error("Mixed types in list! " + str(item_type) + " != " + str(new_type))
+
+                        nbt_list.append(new_value);
+                        if not self.seek_to_next_comma_delim_element():
+                            break;
+
+                        if not self.reader.canRead():
+                            self.raise_error("Unexpected end of array")
+
+                    self.advance_and_fail_if_next_is_not(']');
+                    return TagList(nbt_list);
+
+            def parse_compound(self):
+                self.advance_and_fail_if_next_is_not('{');
+                compound = collections.OrderedDict()
+
+                self.reader.skipWhitespace()
+
+                while self.reader.canRead() and self.reader.peek() != '}':
+                    orig_pos = self.reader.getCursor();
+                    key = self.parseKeyString();
+
+                    if not key:
+                        self.reader.setCursor(orig_pos);
+                        self.raise_error("Failed to parse TagCompound key")
+
+                    self.advance_and_fail_if_next_is_not(':');
+                    compound[key] = self.parse_any_tag();
+                    if not self.seek_to_next_comma_delim_element():
+                        break;
+
+                    if not self.reader.canRead():
+                        self.raise_error("Failed to parse TagCompound element")
+
+                self.advance_and_fail_if_next_is_not('}');
+                return TagCompound(compound);
+
+
+            def seek_to_next_comma_delim_element(self):
+                self.reader.skipWhitespace();
+                if self.reader.canRead() and self.reader.peek() == ',':
+                    self.reader.skip();
+                    self.reader.skipWhitespace();
+                    return True;
+                else:
+                    return False;
+
+            def advance_and_fail_if_next_is_not(self, char):
+                self.reader.skipWhitespace()
+                self.reader.expect(char)
+
+            def raise_error(self, msg):
+                raise SyntaxError(msg + " at ->" + self.reader.string[self.reader.cursor:])
+
+        return MojangsonParser(json).parse_compound()
 
 class TagRoot(TagCompound):
     root = True

@@ -46,7 +46,7 @@ class StringReader(object):
         return self.string[self.cursor:]
 
     def canRead(self,length=1):
-        return cursor + length <= len(self.string)
+        return self.cursor + length <= len(self.string)
 
     def peek(self,offset=0):
         return self.string[self.cursor+offset]
@@ -150,12 +150,12 @@ class StringReader(object):
                 else:
                     self.cursor -= 1
                     raise SyntaxError("Unexpected escaped character '" + c + "'")
-                if c == '\\':
-                    escaped = True
-                elif c == '"':
-                    return result
-                else:
-                    result += c
+            elif c == '\\':
+                escaped = True
+            elif c == '"':
+                return result
+            else:
+                result += c
 
         raise SyntaxError("expected end quote")
 
@@ -180,6 +180,6 @@ class StringReader(object):
 
     def expect(self,c):
         if not self.canRead() or self.peek() != c:
-            raise SyntaxError("Expected character " + str(c))
+            raise SyntaxError("Expected character '" + str(c) + "' at ->'" + self.string[self.cursor:] + "'")
         self.skip()
 
