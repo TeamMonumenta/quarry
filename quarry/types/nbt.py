@@ -282,7 +282,7 @@ class TagInt(_DataTag):
 
 class TagLong(_DataTag):
     fmt = 'q'
-    postfix = ('l',get_color('red','ansi')+'l'+get_color('reset','ansi'))
+    postfix = ('L',get_color('red','ansi')+'L'+get_color('reset','ansi'))
 
 
 class TagFloat(_DataTag):
