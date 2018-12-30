@@ -478,7 +478,7 @@ class TagList(_Tag):
 
 class TagCompound(_Tag):
     root = False
-    preserve_order = False
+    preserve_order = True
     prefix = ('{',get_color('white','ansi')+'{'+get_color('gold','ansi'))
     postfix = ('}',get_color('white','ansi')+'}'+get_color('reset','ansi'))
     separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
