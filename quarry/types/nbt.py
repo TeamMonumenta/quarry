@@ -33,6 +33,9 @@ class _Tag(object):
     def to_bytes(self):
         raise NotImplementedError
 
+    def deep_copy(self):
+        return type(self).from_bytes(self.to_bytes())
+
     def to_obj(self):
         return self.value
 
