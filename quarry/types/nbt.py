@@ -1,86 +1,16 @@
 import collections
 import functools
 import gzip
+import re
 import time
 import zlib
-import re
 
 from brigadier.string_reader import StringReader
 from quarry.types.buffer import Buffer
+from quarry.types.text_format import ansify_text, unformat_text
 
 _kinds = {}
 _ids = {}
-
-
-# Format codes
-format_codes = {
-    "colors":'0123456789abcdef',
-    "styles":'klmnor',
-    "list":[
-        {"id":"0", "display":"Black",         "technical":"black",         "ansi":"\x1b[30m",   "foreground":0x000000, "background":0x000000},
-        {"id":"1", "display":"Dark Blue",     "technical":"dark_blue",     "ansi":"\x1b[34m",   "foreground":0x0000AA, "background":0x00002A},
-        {"id":"2", "display":"Dark Green",    "technical":"dark_green",    "ansi":"\x1b[32m",   "foreground":0x00AA00, "background":0x002A00},
-        {"id":"3", "display":"Dark Aqua",     "technical":"dark_aqua",     "ansi":"\x1b[36m",   "foreground":0x00AAAA, "background":0x002A2A},
-        {"id":"4", "display":"Dark Red",      "technical":"dark_red",      "ansi":"\x1b[31m",   "foreground":0xAA0000, "background":0x2A0000},
-        {"id":"5", "display":"Dark Purple",   "technical":"dark_purple",   "ansi":"\x1b[35m",   "foreground":0xAA00AA, "background":0x2A002A},
-        {"id":"6", "display":"Gold",          "technical":"gold",          "ansi":"\x1b[33m",   "foreground":0xFFAA00, "background":0x2A2A00},
-        {"id":"7", "display":"Gray",          "technical":"gray",          "ansi":"\x1b[37m",   "foreground":0xAAAAAA, "background":0x2A2A2A},
-        {"id":"8", "display":"Dark Gray",     "technical":"dark_gray",     "ansi":"\x1b[30;1m", "foreground":0x555555, "background":0x151515},
-        {"id":"9", "display":"Blue",          "technical":"blue",          "ansi":"\x1b[34;1m", "foreground":0x5555FF, "background":0x15153F},
-        {"id":"a", "display":"Green",         "technical":"green",         "ansi":"\x1b[32;1m", "foreground":0x55FF55, "background":0x153F15},
-        {"id":"b", "display":"Aqua",          "technical":"aqua",          "ansi":"\x1b[36;1m", "foreground":0x55FFFF, "background":0x153F3F},
-        {"id":"c", "display":"Red",           "technical":"red",           "ansi":"\x1b[31;1m", "foreground":0xFF5555, "background":0x3F1515},
-        {"id":"d", "display":"Light Purple",  "technical":"light_purple",  "ansi":"\x1b[35;1m", "foreground":0xFF55FF, "background":0x3F153F},
-        {"id":"e", "display":"Yellow",        "technical":"yellow",        "ansi":"\x1b[33;1m", "foreground":0xFFFF55, "background":0x3F3F15},
-        {"id":"f", "display":"White",         "technical":"white",         "ansi":"\x1b[37;1m", "foreground":0xFFFFFF, "background":0x3F3F3F},
-
-        {"id":"k", "display":"Obfuscated",    "technical":"obfuscated",    "ansi":"\x1b[7m",    },
-        {"id":"l", "display":"Bold",          "technical":"bold",          "ansi":"\x1b[1m",    },
-        {"id":"m", "display":"Strikethrough", "technical":"strikethrough", "ansi":"\x1b[9m",    },
-        {"id":"n", "display":"Underline",     "technical":"underlined",    "ansi":"\x1b[4m",    },
-        {"id":"o", "display":"Italic",        "technical":"italic",        "ansi":"\x1b[3m",    },
-        {"id":"r", "display":"Reset",         "technical":"reset",         "ansi":"\x1b[0m",    },
-    ],
-}
-
-def get_color(match,key=None):
-    """
-    Return one piece of color information by an ID or name
-    """
-    for format in format_codes["list"]:
-        if (
-            str(match).lower() == format["id"] or
-            str(match).lower() == format["display"].lower() or
-            str(match).lower() == format["technical"]
-        ):
-            # Match found; return the specified part of the format,
-            # otherwise the whole format
-            return format.get(key,format)
-
-def unformat_text(text):
-    """
-    Return the provided text without §-style format codes
-    """
-    while '§' in text:
-        i = text.find('§')
-        text = text[:i]+text[i+2:]
-    return text
-
-def ansify_text(text,show_section=False):
-    """
-    Return the provided text with §-style format codes converted to ansi format codes (compatible with most terminals)
-    """
-    result = ''
-    while '§' in text:
-        i = text.find('§')
-        ansiCode = get_color(text[i+1],'ansi')
-        result += text[:i]
-        if show_section:
-            result += text[i:i+2]
-        result += ansiCode
-        text = text[i+2:]
-    result += text
-    return result
 
 # Base types ------------------------------------------------------------------
 
