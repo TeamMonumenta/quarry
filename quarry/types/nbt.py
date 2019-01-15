@@ -7,7 +7,7 @@ import zlib
 
 from brigadier.string_reader import StringReader
 from quarry.types.buffer import Buffer
-from quarry.types.text_format import ansify_text, unformat_text
+from quarry.types.text_format import ansify_text, get_format, unformat_text
 
 _kinds = {}
 _ids = {}
@@ -19,8 +19,8 @@ class _Tag(object):
     def __init__(self, value):
         self.value = value
 
-    prefix = ('',get_color('gold','ansi'))
-    postfix = ('',get_color('reset','ansi'))
+    prefix = ('',get_format('gold').ansi_code)
+    postfix = ('',get_format('reset').ansi_code)
 
     @classmethod
     def from_bytes(cls, bytes):
@@ -96,7 +96,7 @@ class _DataTag(_Tag):
 
 class _ArrayTag(_Tag):
     fmt = None
-    separator = (',',get_color('white','ansi')+', ')
+    separator = (',',get_format('white').ansi_code+', ')
 
     def __len__(self):
         return len(self.value)
@@ -200,37 +200,37 @@ class _ArrayTag(_Tag):
 
 class TagByte(_DataTag):
     fmt = 'b'
-    postfix = ('b',get_color('red','ansi')+'b'+get_color('reset','ansi'))
+    postfix = ('b',get_format('red').ansi_code+'b'+get_format('reset').ansi_code)
 
 
 class TagShort(_DataTag):
     fmt = 'h'
-    postfix = ('s',get_color('red','ansi')+'s'+get_color('reset','ansi'))
+    postfix = ('s',get_format('red').ansi_code+'s'+get_format('reset').ansi_code)
 
 
 class TagInt(_DataTag):
     fmt = 'i'
-    postfix = ('',get_color('reset','ansi'))
+    postfix = ('',get_format('reset').ansi_code)
 
 
 class TagLong(_DataTag):
     fmt = 'q'
-    postfix = ('L',get_color('red','ansi')+'L'+get_color('reset','ansi'))
+    postfix = ('L',get_format('red').ansi_code+'L'+get_format('reset').ansi_code)
 
 
 class TagFloat(_DataTag):
     fmt = 'f'
-    postfix = ('f',get_color('red','ansi')+'f'+get_color('reset','ansi'))
+    postfix = ('f',get_format('red').ansi_code+'f'+get_format('reset').ansi_code)
 
 
 class TagDouble(_DataTag):
     fmt = 'd'
-    postfix = ('d',get_color('red','ansi')+'d'+get_color('reset','ansi'))
+    postfix = ('d',get_format('red').ansi_code+'d'+get_format('reset').ansi_code)
 
 
 class TagString(_Tag):
-    prefix = ('"',get_color('white','ansi')+'"'+get_color('green','ansi'))
-    postfix = ('"',get_color('reset','ansi')+get_color('white','ansi')+'"'+get_color('reset','ansi'))
+    prefix = ('"',get_format('white').ansi_code+'"'+get_format('green').ansi_code)
+    postfix = ('"',get_format('white').ansi_code+'"'+get_format('reset').ansi_code)
 
     @classmethod
     def from_buff(cls, buff):
@@ -269,40 +269,40 @@ class TagString(_Tag):
 
 class TagByteArray(_ArrayTag):
     fmt = 'b'
-    prefix = ('[B;',get_color('white','ansi')+'['+get_color('red','ansi')+'B'+get_color('white','ansi')+'; '+get_color('gold','ansi'))
-    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
-    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
-    type_postfix = ('b',get_color('red','ansi')+'b')
+    prefix = ('[B;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'B'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
+    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    type_postfix = ('b',get_format('red').ansi_code+'b')
 
 
 class TagIntArray(_ArrayTag):
     fmt = 'i'
-    prefix = ('[I;',get_color('white','ansi')+'['+get_color('red','ansi')+'I'+get_color('white','ansi')+'; '+get_color('gold','ansi'))
-    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
-    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
+    prefix = ('[I;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'I'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
+    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
     type_postfix = ('','')
 
 
 class TagLongArray(_ArrayTag):
     fmt = 'q'
-    prefix = ('[L;',get_color('white','ansi')+'['+get_color('red','ansi')+'L'+get_color('white','ansi')+'; '+get_color('gold','ansi'))
-    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
-    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
-    type_postfix = ('l',get_color('red','ansi')+'l')
+    prefix = ('[L;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
+    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    type_postfix = ('l',get_format('red').ansi_code+'l')
 
 
 class TagUnsignedLongArray(_ArrayTag):
     fmt = 'Q'
-    prefix = ('[L;',get_color('white','ansi')+'['+get_color('red','ansi')+'L'+get_color('white','ansi')+'; '+get_color('gold','ansi'))
-    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
-    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
-    type_postfix = ('l',get_color('red','ansi')+'l')
+    prefix = ('[L;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
+    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    type_postfix = ('l',get_format('red').ansi_code+'l')
 
 
 class TagList(_Tag):
-    prefix = ('[',get_color('white','ansi')+'['+get_color('gold','ansi'))
-    postfix = (']',get_color('white','ansi')+']'+get_color('reset','ansi'))
-    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
+    prefix = ('[',get_format('white').ansi_code+'['+get_format('gold').ansi_code)
+    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
 
     def __len__(self):
         return len(self.value)
@@ -412,10 +412,10 @@ class TagList(_Tag):
 class TagCompound(_Tag):
     root = False
     preserve_order = True
-    prefix = ('{',get_color('white','ansi')+'{'+get_color('gold','ansi'))
-    postfix = ('}',get_color('white','ansi')+'}'+get_color('reset','ansi'))
-    separator = (',',get_color('white','ansi')+', '+get_color('gold','ansi'))
-    key_value_separator = (':',get_color('white','ansi')+': ')
+    prefix = ('{',get_format('white').ansi_code+'{'+get_format('gold').ansi_code)
+    postfix = ('}',get_format('white').ansi_code+'}'+get_format('reset').ansi_code)
+    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    key_value_separator = (':',get_format('white').ansi_code+': ')
 
     @classmethod
     def from_buff(cls, buff):
