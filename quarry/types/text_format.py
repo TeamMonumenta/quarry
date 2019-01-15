@@ -115,17 +115,23 @@ def get_format(match):
     else:
         raise KeyError("No such format code: {}".format(match))
 
-def ansify_text(text,show_section=False):
+def ansify_text(text,show_section=True):
     """
     Return the provided text with §-style format codes converted to ansi format codes (compatible with most terminals)
     """
     result = text
     for format in TextFormats:
-        result = result.replace(
-            format.value.section_code,
-            format.value.section_code + format.value.ansi_code
-        )
-    return result
+        if show_section:
+            result = result.replace(
+                format.value.section_code,
+                format.value.section_code + format.value.ansi_code
+            )
+        else:
+            result = result.replace(
+                format.value.section_code,
+                format.value.ansi_code
+            )
+    return result + TextStyles.reset.value.ansi_code
 
 def unformat_text(text):
     """
