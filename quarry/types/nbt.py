@@ -48,6 +48,9 @@ class _Tag(object):
     def __eq__(self, other):
         return self.to_obj() == other.to_obj()
 
+    def equals_exact(self, other):
+        return self.to_bytes() == other.to_bytes()
+
     def __lt__(self, other):
         return self.to_obj() < other.to_obj()
 
