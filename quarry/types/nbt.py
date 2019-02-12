@@ -84,6 +84,23 @@ class _DataTag(_Tag):
     def is_subset(self,other):
         return self.value == other.value
 
+    def diff(self, other, order_matters=True, show_values=False, path=''):
+        if type(self) != type(other):
+            print('Diff at path "{}": type'.format(path))
+            if show_values:
+                print('  -  self is type: {}'.format(type( self)))
+                print('  - other is type: {}'.format(type(other)))
+            return True
+
+        if self.to_obj() != other.to_obj():
+            print('Diff at path "{}": value'.format(path))
+            if show_values:
+                print('  -  self is: {}'.format( self.to_obj()))
+                print('  - other is: {}'.format(other.to_obj()))
+            return True
+
+        return False
+
     def has_path(self,path):
         if len(path) == 0:
             return True
@@ -113,6 +130,26 @@ class _ArrayTag(_Tag):
         return (
             Buffer.pack('i', len(self.value)) +
             Buffer.pack_array(self.fmt, self.value))
+
+    def diff(self, other, order_matters=True, show_values=False, path=''):
+        if type(self) != type(other):
+            print('Diff at path "{}": type'.format(path))
+            if show_values:
+                print('  -  self is type: {}'.format(type( self)))
+                print('  - other is type: {}'.format(type(other)))
+            return True
+
+        if len(self.value) != len(other.value):
+            print('Diff at path "{}": length'.format(path))
+            if show_values:
+                print('  -  self is length: {}'.format(len( self)))
+                print('  - other is length: {}'.format(len(other)))
+            return True
+
+        different = False
+        for i in range(len(self.value)):
+            different |= self.value[i].diff(other.value[i], order_matters, show_values, '{}[{}]'.format(path,i))
+        return different
 
     def is_subset(self,other):
         if (
@@ -244,6 +281,23 @@ class TagString(_Tag):
         data = self.value.encode('utf8')
         return Buffer.pack('H', len(data)) + data
 
+    def diff(self, other, order_matters=True, show_values=False, path=''):
+        if type(self) != type(other):
+            print('Diff at path "{}": type'.format(path))
+            if show_values:
+                print('  -  self is type: {}'.format(type( self)))
+                print('  - other is type: {}'.format(type(other)))
+            return True
+
+        if self.to_obj() != other.to_obj():
+            print('Diff at path "{}": value'.format(path))
+            if show_values:
+                print('  -  self is: {}'.format( self.to_obj()))
+                print('  - other is: {}'.format(other.to_obj()))
+            return True
+
+        return False
+
     def is_subset(self,other):
         return self.value == other.value
 
@@ -327,6 +381,26 @@ class TagList(_Tag):
 
     def to_obj(self):
         return [tag.to_obj() for tag in self.value]
+
+    def diff(self, other, order_matters=True, show_values=False, path=''):
+        if type(self) != type(other):
+            print('Diff at path "{}": type'.format(path))
+            if show_values:
+                print('  -  self is type: {}'.format(type( self)))
+                print('  - other is type: {}'.format(type(other)))
+            return True
+
+        if len(self.value) != len(other.value):
+            print('Diff at path "{}": length'.format(path))
+            if show_values:
+                print('  -  self is length: {}'.format(len( self)))
+                print('  - other is length: {}'.format(len(other)))
+            return True
+
+        different = False
+        for i in range(len(self.value)):
+            different |= self.value[i].diff(other.value[i], order_matters, show_values, '{}[{}]'.format(path,i))
+        return different
 
     def is_subset(self,other):
         if type(other) != TagList:
@@ -473,6 +547,40 @@ class TagCompound(_Tag):
                 self.value[name].update(new_tag)
             else:
                 self.value[name] = new_tag
+
+    def diff(self, other, order_matters=True, show_values=True, path=''):
+        if type(self) != type(other):
+            print('Diff at path "{}": type'.format(path))
+            if show_values:
+                print('  -  self is type: {}'.format(type( self)))
+                print('  - other is type: {}'.format(type(other)))
+            return True
+
+        own_keys = self.value.keys()
+        other_keys = other.value.keys()
+        # Order insensitive
+        if own_keys != other_keys:
+            print('Diff at path "{}": keys'.format(path))
+            if show_values:
+                print('  - both have keys: {}'.format(list(own_keys & other_keys)))
+                print('  -  self has keys: {}'.format(list(own_keys - other_keys)))
+                print('  - other has keys: {}'.format(list(other_keys - own_keys)))
+            return True
+
+        different = False
+        # Order sensitive
+        if order_matters and list(own_keys) != list(other_keys):
+            print('Diff at path "{}": key order'.format(path))
+            if show_values:
+                print('  -  self key order: {}'.format(own_keys))
+                print('  - other key order: {}'.format(other_keys))
+            different = True
+
+        # Order insensitive
+        conditional_dot = '' if len(path) == 0 else '.'
+        for key in self.value.keys():
+            different |= self.value[key].diff(other.value[key], order_matters, show_values, '{}{}{}'.format(path, conditional_dot, key))
+        return different
 
     def is_subset(self,other):
         if type(other) != TagCompound:
