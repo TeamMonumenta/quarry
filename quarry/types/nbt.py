@@ -19,8 +19,8 @@ class _Tag(object):
     def __init__(self, value):
         self.value = value
 
-    prefix = ('',get_format('gold').ansi_code)
-    postfix = ('',get_format('reset').ansi_code)
+    prefix = ('', get_format('gold').ansi_code)
+    postfix = ('', get_format('reset').ansi_code)
 
     @classmethod
     def from_bytes(cls, bytes):
@@ -54,13 +54,13 @@ class _Tag(object):
     def __lt__(self, other):
         return self.to_obj() < other.to_obj()
 
-    def to_mojangson(self,sort=None,highlight=False):
+    def to_mojangson(self, sort=None, highlight=False):
         prefix = self.prefix[highlight]
         postfix = self.postfix[highlight]
 
         return prefix + str(self.value) + postfix
 
-    def tree(self,sort=None,indent='    ',level=0):
+    def tree(self, sort=None, indent='    ', level=0):
         prefix = self.prefix[True]
         postfix = self.postfix[True]
 
@@ -81,7 +81,7 @@ class _DataTag(_Tag):
     def to_bytes(self):
         return Buffer.pack(self.fmt, self.value)
 
-    def is_subset(self,other):
+    def is_subset(self, other):
         return self.value == other.value
 
     def diff(self, other, order_matters=True, show_values=False, path=''):
@@ -101,22 +101,39 @@ class _DataTag(_Tag):
 
         return False
 
-    def has_path(self,path):
-        if len(path) == 0:
-            return True
-        else:
-            return False
+    def has_path(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
 
-    def at_path(self,path):
-        if len(path) == 0:
-            return self
+        return not path.canRead()
+
+    def at_paths(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
+
+        if not path.canRead():
+            return [self]
         else:
             raise KeyError( str(type(self)) + ' cannot contain other tags, and is the end of path "' + path + '"' )
+
+    def at_path(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
+
+        results = self.at_paths(path)
+        if len(results) == 0:
+            print("No results for path:\n" + path.string + "\n" + " "*path.cursor + "^")
+            raise KeyError("No results for path")
+        elif len(results) > 1:
+            print("More than one result for path:\n" + path.string + "\n" + " "*path.cursor + "^")
+            raise KeyError("More than one result for path:")
+        else:
+            return results[0]
 
 
 class _ArrayTag(_Tag):
     fmt = None
-    separator = (',',get_format('white').ansi_code+', ')
+    separator = (',', get_format('white').ansi_code+', ')
 
     def __len__(self):
         return len(self.value)
@@ -151,7 +168,7 @@ class _ArrayTag(_Tag):
             different |= self.value[i].diff(other.value[i], order_matters, show_values, '{}[{}]'.format(path,i))
         return different
 
-    def is_subset(self,other):
+    def is_subset(self, other):
         if (
             type(other) != type(self) or
             len(other) != len(self)
@@ -162,7 +179,7 @@ class _ArrayTag(_Tag):
                 return False
         return True
 
-    def to_mojangson(self,sort=None,highlight=False):
+    def to_mojangson(self, sort=None, highlight=False):
         prefix = self.prefix[highlight]
         separator = self.separator[highlight]
         type_postfix = self.type_postfix[highlight]
@@ -173,7 +190,7 @@ class _ArrayTag(_Tag):
             inner_mojangson.append( str(content) + type_postfix )
         return prefix + separator.join(inner_mojangson) + postfix
 
-    def tree(self,sort=None,indent='    ',level=0):
+    def tree(self, sort=None, indent='    ', level=0):
         prefix = self.prefix[True]
         separator = self.separator[True]
         type_postfix = self.type_postfix[True]
@@ -193,84 +210,150 @@ class _ArrayTag(_Tag):
         else:
             return result
 
-    def has_path(self,path):
-        if not isinstance(path,StringReader):
+    def _path_iterator(self, path):
+        class _TagListPathIter(object):
+            def __init__(self, tag_list, path):
+                self.tag_list = tag_list
+                self.index = 0
+
+                self.match_nbt = None
+                self.match_index = None
+
+                path.expect('[')
+                if not path.canRead():
+                    raise SyntaxError("Expected ']' in path.")
+                elif path.peek() == ']':
+                    # Return all indices
+                    self.__next__ = self._next_all
+                elif path.peek() == '{':
+                    # Must match NBT
+                    self.match_nbt = TagCompount.from_mojangson(path)
+                    self.__next__ = self._next_nbt
+                else:
+                    # Some numeric index
+                    self.match_index = path.readInt()
+                    self.__next__ = self._next_only
+                path.expect(']')
+
+                # Having a following . is allowed, but not required
+                if path.canRead() and path.peek() == '.':
+                    path.skip()
+
+                # Copy the path for use while iterating.
+                self.path = StringReader(path)
+
+            def __iter__(self):
+                return self
+
+            def _stop_iteration(self):
+                raise StopIteration
+
+            def _next_only(self):
+                try:
+                    self.__next__ = self._stop_iteration
+                    return self.tag_list.value[self.match_index]
+                except:
+                    raise StopIteration
+
+            def _next_all(self):
+                if self.index >= len(self.tag_list.value):
+                    self.__next__ = self._stop_iteration
+                    raise StopIteration
+                result = self.tag_list.value[self.index]
+                self.index += 1
+                return result
+
+            def _next_nbt(self):
+                while True:
+                    tag = self._next_all()
+                    if self.match_nbt.is_subset(tag):
+                        return tag
+
+            def __next__(self):
+                # Overridden by other methods
+                raise StopIteration
+
+        return _TagListPathIter(tag_list, path)
+        
+    def has_path(self, path):
+        if not isinstance(path, StringReader):
             path = StringReader(path)
-        if path.peek() == '[':
-            path = path[1:]
-        if not ']' in path:
-            return False
-        if path.find(']') + 1 != len(path):
-            return False
-        path = path[:-1]
 
-        index = -1
-        try:
-            index = int(path)
-        except:
-            return False
+        if not path.canRead():
+            return True
 
-        if index < 0 or index >= len(self.value):
-            return False
+        item_iterator = self._path_iterator(path)
+        for tag in item_iterator:
+            # Confirm there is at least one item
+            return True
 
-        return True
+        return False
 
-    def at_path(self,path):
-        if path.startswith('['):
-            path = path[1:]
-        if not ']' in path:
-            raise IndexError( '] not in path "' + path + '"' )
-        if path.find(']') + 1 != len(path):
-            raise IndexError( str(type(self)) + ' cannot contain other tags, and is the end of path "' + path + '"' )
-        path = path[:-1]
+    def at_paths(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
 
-        index = -1
-        try:
-            index = int(path)
-        except:
-            raise IndexError( 'Path index is not an integer: ' + path )
+        if not path.canRead():
+            return [self]
 
-        if index < 0 or index >= len(self.value):
-            raise IndexError( 'Index ' + str(index) + ' not in range (' + str(len(self.value)) + ' entries)' )
+        results = []
+        item_iterator = self._path_iterator(path)
+        for tag in item_iterator:
+            index, tag = item
+            results += tag.at_paths(path)
 
-        return self.value[index]
+        return results
+
+    def at_path(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
+
+        results = self.at_paths(path)
+        if len(results) == 0:
+            print("No results for path:\n" + path.string + "\n" + " "*path.cursor + "^")
+            raise KeyError("No results for path")
+        elif len(results) > 1:
+            print("More than one result for path:\n" + path.string + "\n" + " "*path.cursor + "^")
+            raise KeyError("More than one result for path:")
+        else:
+            return results[0]
 
 
 # NBT tags --------------------------------------------------------------------
 
 class TagByte(_DataTag):
     fmt = 'b'
-    postfix = ('b',get_format('red').ansi_code+'b'+get_format('reset').ansi_code)
+    postfix = ('b', get_format('red').ansi_code+'b'+get_format('reset').ansi_code)
 
 
 class TagShort(_DataTag):
     fmt = 'h'
-    postfix = ('s',get_format('red').ansi_code+'s'+get_format('reset').ansi_code)
+    postfix = ('s', get_format('red').ansi_code+'s'+get_format('reset').ansi_code)
 
 
 class TagInt(_DataTag):
     fmt = 'i'
-    postfix = ('',get_format('reset').ansi_code)
+    postfix = ('', get_format('reset').ansi_code)
 
 
 class TagLong(_DataTag):
     fmt = 'q'
-    postfix = ('L',get_format('red').ansi_code+'L'+get_format('reset').ansi_code)
+    postfix = ('L', get_format('red').ansi_code+'L'+get_format('reset').ansi_code)
 
 
 class TagFloat(_DataTag):
     fmt = 'f'
-    postfix = ('f',get_format('red').ansi_code+'f'+get_format('reset').ansi_code)
+    postfix = ('f', get_format('red').ansi_code+'f'+get_format('reset').ansi_code)
 
 
 class TagDouble(_DataTag):
     fmt = 'd'
-    postfix = ('d',get_format('red').ansi_code+'d'+get_format('reset').ansi_code)
+    postfix = ('d', get_format('red').ansi_code+'d'+get_format('reset').ansi_code)
 
 
 class TagString(_Tag):
-    prefix = ('"',get_format('white').ansi_code+'"'+get_format('green').ansi_code)
-    postfix = ('"',get_format('white').ansi_code+'"'+get_format('reset').ansi_code)
+    prefix = ('"', get_format('white').ansi_code+'"'+get_format('green').ansi_code)
+    postfix = ('"', get_format('white').ansi_code+'"'+get_format('reset').ansi_code)
 
     @classmethod
     def from_buff(cls, buff):
@@ -298,24 +381,24 @@ class TagString(_Tag):
 
         return False
 
-    def is_subset(self,other):
+    def is_subset(self, other):
         return self.value == other.value
 
-    def to_mojangson(self,sort=None,highlight=False):
+    def to_mojangson(self, sort=None, highlight=False):
         prefix = self.prefix[highlight]
         postfix = self.postfix[highlight]
 
-        text = self.value.replace('\\','\\\\').replace('\n','\\n"').replace('"','\\"')
+        text = self.value.replace('\\', '\\\\').replace('\n', '\\n"').replace('"', '\\"')
         if highlight:
-            text = ansify_text(text,show_section=True)
+            text = ansify_text(text, show_section=True)
         return prefix + text + postfix
 
-    def tree(self,sort=None,indent='    ',level=0):
+    def tree(self, sort=None, indent='    ', level=0):
         prefix = self.prefix[True]
         postfix = self.postfix[True]
 
-        text = self.value.replace('\\','\\\\').replace('\n','\\n"').replace('"','\\"')
-        text = ansify_text(text,show_section=True)
+        text = self.value.replace('\\', '\\\\').replace('\n', '\\n"').replace('"', '\\"')
+        text = ansify_text(text, show_section=True)
         result = prefix + text + postfix
 
         if level == 0:
@@ -326,40 +409,40 @@ class TagString(_Tag):
 
 class TagByteArray(_ArrayTag):
     fmt = 'b'
-    prefix = ('[B;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'B'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
-    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
-    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
-    type_postfix = ('b',get_format('red').ansi_code+'b')
+    prefix = ('[B;', get_format('white').ansi_code+'['+get_format('red').ansi_code+'B'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
+    postfix = (']', get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',', get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    type_postfix = ('b', get_format('red').ansi_code+'b')
 
 
 class TagIntArray(_ArrayTag):
     fmt = 'i'
-    prefix = ('[I;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'I'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
-    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
-    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    prefix = ('[I;', get_format('white').ansi_code+'['+get_format('red').ansi_code+'I'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
+    postfix = (']', get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',', get_format('white').ansi_code+', '+get_format('gold').ansi_code)
     type_postfix = ('','')
 
 
 class TagLongArray(_ArrayTag):
     fmt = 'q'
-    prefix = ('[L;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
-    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
-    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
-    type_postfix = ('l',get_format('red').ansi_code+'l')
+    prefix = ('[L;', get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
+    postfix = (']', get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',', get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    type_postfix = ('l', get_format('red').ansi_code+'l')
 
 
 class TagUnsignedLongArray(_ArrayTag):
     fmt = 'Q'
-    prefix = ('[L;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
-    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
-    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
-    type_postfix = ('l',get_format('red').ansi_code+'l')
+    prefix = ('[L;', get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
+    postfix = (']', get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',', get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    type_postfix = ('l', get_format('red').ansi_code+'l')
 
 
 class TagList(_Tag):
-    prefix = ('[',get_format('white').ansi_code+'['+get_format('gold').ansi_code)
-    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
-    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    prefix = ('[', get_format('white').ansi_code+'['+get_format('gold').ansi_code)
+    postfix = (']', get_format('white').ansi_code+']'+get_format('reset').ansi_code)
+    separator = (',', get_format('white').ansi_code+', '+get_format('gold').ansi_code)
 
     def __len__(self):
         return len(self.value)
@@ -399,10 +482,10 @@ class TagList(_Tag):
 
         different = False
         for i in range(len(self.value)):
-            different |= self.value[i].diff(other.value[i], order_matters, show_values, '{}[{}]'.format(path,i))
+            different |= self.value[i].diff(other.value[i], order_matters, show_values, '{}[{}]'.format(path, i))
         return different
 
-    def is_subset(self,other):
+    def is_subset(self, other):
         if type(other) != TagList:
             return False
         for self_value in self.value:
@@ -410,24 +493,24 @@ class TagList(_Tag):
                 return False
         return True
 
-    def to_mojangson(self,sort=None,highlight=False):
+    def to_mojangson(self, sort=None, highlight=False):
         prefix = self.prefix[highlight]
         separator = self.separator[highlight]
         postfix = self.postfix[highlight]
 
         inner_mojangson = []
         for content in self.value:
-            inner_mojangson.append(content.to_mojangson(sort,highlight))
+            inner_mojangson.append(content.to_mojangson(sort, highlight))
         return prefix + separator.join(inner_mojangson) + postfix
 
-    def tree(self,sort=None,indent='    ',level=0):
+    def tree(self, sort=None, indent='    ', level=0):
         prefix = self.prefix[True] + '\n'
         separator = self.separator[True] + '\n'
         postfix = indent*level + self.postfix[True]
 
         inner_mojangson = []
         for content in self.value:
-            inner_mojangson.append( indent*(level+1) + content.tree(sort,indent,level+1) )
+            inner_mojangson.append( indent*(level+1) + content.tree(sort, indent, level+1) )
 
         if len(inner_mojangson) == 0:
             result = prefix + postfix
@@ -439,60 +522,123 @@ class TagList(_Tag):
         else:
             return result
 
-    def has_path(self,path):
-        if path.startswith('['):
-            path = path[1:]
-        if not ']' in path:
-            return False
+    def _path_iterator(self, path):
+        class _TagListPathIter(object):
+            def __init__(self, tag_list, path):
+                self.tag_list = tag_list
+                self.index = 0
 
-        split_index = path.find(']')
-        array_index = path[:split_index]
-        path = path[split_index+1:]
+                self.match_nbt = None
+                self.match_index = None
 
-        try:
-            array_index = int(array_index)
-        except:
-            return False
+                path.expect('[')
+                if not path.canRead():
+                    raise SyntaxError("Expected ']' in path.")
+                elif path.peek() == ']':
+                    # Return all indices
+                    self.__next__ = self._next_all
+                elif path.peek() == '{':
+                    # Must match NBT
+                    self.match_nbt = TagCompount.from_mojangson(path)
+                    self.__next__ = self._next_nbt
+                else:
+                    # Some numeric index
+                    self.match_index = path.readInt()
+                    self.__next__ = self._next_only
+                path.expect(']')
 
-        if array_index < 0 or array_index >= len(self.value):
-            return False
+                # Having a following . is allowed, but not required
+                if path.canRead() and path.peek() == '.':
+                    path.skip()
 
-        if path == '':
+                # Copy the path for use while iterating.
+                self.path = StringReader(path)
+
+            def __iter__(self):
+                return self
+
+            def _stop_iteration(self):
+                raise StopIteration
+
+            def _next_only(self):
+                try:
+                    self.__next__ = self._stop_iteration
+                    return self.tag_list.value[self.match_index]
+                except:
+                    raise StopIteration
+
+            def _next_all(self):
+                if self.index >= len(self.tag_list.value):
+                    self.__next__ = self._stop_iteration
+                    raise StopIteration
+                result = self.tag_list.value[self.index]
+                self.index += 1
+                return result
+
+            def _next_nbt(self):
+                while True:
+                    tag = self._next_all()
+                    if self.match_nbt.is_subset(tag):
+                        return tag
+
+            def __next__(self):
+                # Overridden by other methods
+                raise StopIteration
+
+        return _TagListPathIter(self, path)
+        
+    def has_path(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
+
+        if not path.canRead():
             return True
+
+        item_iterator = self._path_iterator(path)
+        for tag in item_iterator:
+            # Confirm there is at least one matching item
+            path = StringReader(item_iterator.path)
+            if tag.has_path(path):
+                return True
+
+        return False
+
+    def at_paths(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
+
+        if not path.canRead():
+            return [self]
+
+        results = []
+        item_iterator = self._path_iterator(path)
+        for tag in item_iterator:
+            results += tag.at_paths(path)
+
+        return results
+
+    def at_path(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
+
+        results = self.at_paths(path)
+        if len(results) == 0:
+            print("No results for path:\n" + path.string + "\n" + " "*path.cursor + "^")
+            raise KeyError("No results for path")
+        elif len(results) > 1:
+            print("More than one result for path:\n" + path.string + "\n" + " "*path.cursor + "^")
+            raise KeyError("More than one result for path:")
         else:
-            return self.value[array_index].has_path(path)
-
-    def at_path(self,path):
-        if path.startswith('['):
-            path = path[1:]
-        if not ']' in path:
-            raise IndexError( '] not in path "' + path + '"' )
-
-        split_index = path.find(']')
-        array_index = path[:split_index]
-        path = path[split_index+1:]
-
-        try:
-            array_index = int(array_index)
-        except:
-            raise IndexError( 'Array index is not an integer: ' + array_index )
-
-        if array_index < 0 or array_index >= len(self.value):
-            raise IndexError( 'Index ' + str(array_index) + ' not in range (' + str(len(self.value)) + ' entries)' )
-
-        if path == '':
-            return self.value[array_index]
-        else:
-            return self.value[array_index].at_path(path)
+            return results[0]
 
 
 class TagCompound(_Tag):
     root = False
     preserve_order = True
-    prefix = ('{',get_format('white').ansi_code+'{'+get_format('gold').ansi_code)
-    postfix = ('}',get_format('white').ansi_code+'}'+get_format('reset').ansi_code)
-    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
-    key_value_separator = (':',get_format('white').ansi_code+': ')
+    prefix = ('{', get_format('white').ansi_code+'{'+get_format('gold').ansi_code)
+    postfix = ('}', get_format('white').ansi_code+'}'+get_format('reset').ansi_code)
+    separator = (',', get_format('white').ansi_code+', '+get_format('gold').ansi_code)
+    key_value_separator = (':', get_format('white').ansi_code+': ')
 
     @classmethod
     def from_buff(cls, buff):
@@ -582,7 +728,7 @@ class TagCompound(_Tag):
             different |= self.value[key].diff(other.value[key], order_matters, show_values, '{}{}{}'.format(path, conditional_dot, key))
         return different
 
-    def is_subset(self,other):
+    def is_subset(self, other):
         if type(other) != TagCompound:
             return False
         for aKey in self.value.keys():
@@ -593,13 +739,13 @@ class TagCompound(_Tag):
                 return False
         return True
 
-    def to_mojangson(self,sort=None,highlight=False):
+    def to_mojangson(self, sort=None, highlight=False):
         prefix = self.prefix[highlight]
         key_value_separator = self.key_value_separator[highlight]
         separator = self.separator[highlight]
         postfix = self.postfix[highlight]
 
-        if type(sort) in (list,tuple):
+        if type(sort) in (list, tuple):
             keys = []
             for key in sort:
                 if key in self.value.keys():
@@ -613,16 +759,16 @@ class TagCompound(_Tag):
         inner_mojangson = []
         for key in keys:
             content = self.value[key]
-            inner_mojangson.append( key + key_value_separator + content.to_mojangson(sort,highlight) )
+            inner_mojangson.append( key + key_value_separator + content.to_mojangson(sort, highlight) )
         return prefix + separator.join(inner_mojangson) + postfix
 
-    def tree(self,sort=None,indent='    ',level=0):
+    def tree(self, sort=None, indent='    ', level=0):
         prefix = self.prefix[True] + '\n'
         key_value_separator = self.key_value_separator[True]
         separator = self.separator[True] + '\n'
         postfix = indent*level + self.postfix[True]
 
-        if type(sort) in (list,tuple):
+        if type(sort) in (list, tuple):
             keys = []
             for key in sort:
                 if key in self.value.keys():
@@ -636,7 +782,7 @@ class TagCompound(_Tag):
         inner_mojangson = []
         for key in keys:
             content = self.value[key]
-            inner_mojangson.append( indent*(level+1) + key + key_value_separator + content.tree(sort,indent,level+1) )
+            inner_mojangson.append( indent*(level+1) + key + key_value_separator + content.tree(sort, indent, level+1) )
 
         if len(inner_mojangson) == 0:
             result = prefix + postfix
@@ -648,49 +794,104 @@ class TagCompound(_Tag):
         else:
             return result
 
-    def has_path(self,path):
-        if path.startswith('.') or path.startswith('['):
-            return False
-        split_index = len(path)
-        bracket_index = path.find('[')
-        dot_index = path.find('.')
-
-        if dot_index >= 0:
-            split_index = min(split_index,dot_index)
-        if bracket_index >= 0:
-            split_index = min(split_index,bracket_index)
-
-        key = path[:split_index]
-        path = path[split_index+1:]
-        if key not in self.value:
-            return False
-
-        if path == '':
+    def _get_key_from_path(self, path):
+        if not path.canRead():
+            # This is it
             return True
+
+        elif path.peek() == '{':
+            # Tag provided, match 1 or 0; error if not the first character
+            if path.getCursor() != 0:
+                raise SyntaxError("NBT paths cannot have NBT matching outside array indices past the first node.")
+            tag = TagCompound.from_mojangson(path)
+            if self.is_subset(tag):
+                # Initial test passed, continue reading from this node
+                if path.canRead():
+                    # The '.' is a hard requirement here
+                    path.expect('.')
+                return self._get_key_from_path(path)
+            else:
+                # No matching key
+                return None
+
+        elif path.peek() == '"':
+            # Read a quoted string
+            key = path.readQuotedString()
+            if key not in self.value.keys():
+                # No matching key
+                return None
+            if path.canRead() and path.peek() == '.':
+                path.skip()
+            return key
+
         else:
+            # Read an unquoted string
+
+            # This is the Brigadier StringReader readUnquotedString method, but
+            # with a different set of allowed characters.
+            disallowed_chars = '."[]{}'
+            start = path.cursor
+            while path.canRead() and path.peek() not in disallowed_chars:
+                path.skip()
+            key = path.string[start:path.cursor]
+            # End of readUnquotedString method
+
+            if key not in self.value.keys():
+                # No matching key
+                return None
+            if path.canRead() and path.peek() == '.':
+                path.skip()
+            return key
+
+    def has_path(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
+
+        key = self._get_key_from_path(path)
+
+        if key is True:
+            # This is it
+            return True
+
+        elif key is None:
+            # No matching result
+            return False
+
+        else:
+            # The key was found
             return self.value[key].has_path(path)
 
-    def at_path(self,path):
-        if path.startswith('.') or path.startswith('['):
-            raise KeyError( path + 'not in ' + str(self.value.keys()) )
-        split_index = len(path)
-        bracket_index = path.find('[')
-        dot_index = path.find('.')
+    def at_paths(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
 
-        if dot_index >= 0:
-            split_index = min(split_index,dot_index)
-        if bracket_index >= 0:
-            split_index = min(split_index,bracket_index)
+        key = self._get_key_from_path(path)
 
-        key = path[:split_index]
-        path = path[split_index+1:]
-        if key not in self.value:
-            raise KeyError( 'key "' + key + '" not in ' + str(self.value.keys()) )
+        if key is True:
+            # This is it
+            return [self]
 
-        if path == '':
-            return self.value[key]
+        elif key is None:
+            # No matching result
+            return []
+
         else:
-            return self.value[key].at_path(path)
+            # The key was found
+            return self.value[key].at_paths(path)
+
+    def at_path(self, path):
+        if not isinstance(path, StringReader):
+            path = StringReader(path)
+
+        results = self.at_paths(path)
+        if len(results) == 0:
+            print("No results for path:\n" + path.string + "\n" + " "*path.cursor + "^")
+            raise KeyError("No results for path")
+        elif len(results) > 1:
+            print("More than one result for path:\n" + path.string + "\n" + " "*path.cursor + "^")
+            raise KeyError("More than one result for path:")
+        else:
+            return results[0]
 
     @classmethod
     def from_mojangson(cls, json):
@@ -712,7 +913,10 @@ class TagCompound(_Tag):
             regexLong           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)l$''', re.IGNORECASE)
 
             def __init__(self, json):
-                self.reader = StringReader(json)
+                if type(json) is StringReader:
+                    self.reader = json
+                else:
+                    self.reader = StringReader(json)
 
                 #########################################################
                 # Set to True for verbose parsing - useful to find errors
@@ -1064,7 +1268,7 @@ class RegionFile(object):
 
     def list_chunks(self):
         """
-        Returns a list of (cx,cz) tuples for all existing chunks.
+        Returns a list of (cx, cz) tuples for all existing chunks.
         """
 
         result = []
