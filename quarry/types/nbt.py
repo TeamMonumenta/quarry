@@ -84,22 +84,42 @@ class _DataTag(_Tag):
     def is_subset(self,other):
         return self.value == other.value
 
-    def diff(self, other, order_matters=True, show_values=False, path=''):
+    def diff(self, other, self_name="self", other_name="other", order_matters=True, return_diff=False, path=''):
+        name_field = '{:>' + str(max(len(self_name), len(other_name), len('both'))) + '}'
+        self_name_padded  = name_field.format( self_name)
+        other_name_padded = name_field.format(other_name)
         if type(self) != type(other):
-            print('Diff at path "{}": type'.format(path))
-            if show_values:
-                print('  -  self is type: {}'.format(type( self)))
-                print('  - other is type: {}'.format(type(other)))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'type',
+                    'self': type(self),
+                    'other': type(other)
+                }]
+            else:
+                print('Diff at path "{}": type'.format(path))
+                print('  - ' +  self_name_padded + ' is type: {}'.format(type( self)))
+                print('  - ' + other_name_padded + ' is type: {}'.format(type(other)))
+                return True
 
         if self.to_obj() != other.to_obj():
-            print('Diff at path "{}": value'.format(path))
-            if show_values:
-                print('  -  self is: {}'.format( self.to_obj()))
-                print('  - other is: {}'.format(other.to_obj()))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'value',
+                    'self': self.to_obj(),
+                    'other': other.to_obj()
+                }]
+            else:
+                print('Diff at path "{}": value'.format(path))
+                print('  - ' +  self_name_padded + ' is: {}'.format( self.to_obj()))
+                print('  - ' + other_name_padded + ' is: {}'.format(other.to_obj()))
+                return True
 
-        return False
+        if return_diff:
+            return []
+        else:
+            return False
 
     def has_path(self,path):
         if len(path) == 0:
@@ -131,25 +151,50 @@ class _ArrayTag(_Tag):
             Buffer.pack('i', len(self.value)) +
             Buffer.pack_array(self.fmt, self.value))
 
-    def diff(self, other, order_matters=True, show_values=False, path=''):
+    def diff(self, other, self_name="self", other_name="other", order_matters=True, return_diff=False, path=''):
+        name_field = '{:>' + str(max(len(self_name), len(other_name), len('both'))) + '}'
+        self_name_padded  = name_field.format( self_name)
+        other_name_padded = name_field.format(other_name)
         if type(self) != type(other):
-            print('Diff at path "{}": type'.format(path))
-            if show_values:
-                print('  -  self is type: {}'.format(type( self)))
-                print('  - other is type: {}'.format(type(other)))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'type',
+                    'self': type(self),
+                    'other': type(other)
+                }]
+            else:
+                print('Diff at path "{}": type'.format(path))
+                print('  - ' +  self_name_padded + ' is type: {}'.format(type( self)))
+                print('  - ' + other_name_padded + ' is type: {}'.format(type(other)))
+                return True
 
         if len(self.value) != len(other.value):
-            print('Diff at path "{}": length'.format(path))
-            if show_values:
-                print('  -  self is length: {}'.format(len( self)))
-                print('  - other is length: {}'.format(len(other)))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'length',
+                    'self': len(self),
+                    'other': len(other)
+                }]
+            else:
+                print('Diff at path "{}": length'.format(path))
+                print('  - ' +  self_name_padded + ' is length: {}'.format(len( self)))
+                print('  - ' + other_name_padded + ' is length: {}'.format(len(other)))
+                return True
 
-        different = False
+        if return_diff:
+            difference = []
+        else:
+            difference = False
+
         for i in range(len(self.value)):
-            different |= self.value[i].diff(other.value[i], order_matters, show_values, '{}[{}]'.format(path,i))
-        return different
+            if return_diff:
+                difference += self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path,i))
+            else:
+                difference |= self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path,i))
+
+        return difference
 
     def is_subset(self,other):
         if (
@@ -281,22 +326,42 @@ class TagString(_Tag):
         data = self.value.encode('utf8')
         return Buffer.pack('H', len(data)) + data
 
-    def diff(self, other, order_matters=True, show_values=False, path=''):
+    def diff(self, other, self_name="self", other_name="other", order_matters=True, return_diff=False, path=''):
+        name_field = '{:>' + str(max(len(self_name), len(other_name), len('both'))) + '}'
+        self_name_padded  = name_field.format( self_name)
+        other_name_padded = name_field.format(other_name)
         if type(self) != type(other):
-            print('Diff at path "{}": type'.format(path))
-            if show_values:
-                print('  -  self is type: {}'.format(type( self)))
-                print('  - other is type: {}'.format(type(other)))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'type',
+                    'self': type(self),
+                    'other': type(other)
+                }]
+            else:
+                print('Diff at path "{}": type'.format(path))
+                print('  - ' +  self_name_padded + ' is type: {}'.format(type( self)))
+                print('  - ' + other_name_padded + ' is type: {}'.format(type(other)))
+                return True
 
         if self.to_obj() != other.to_obj():
-            print('Diff at path "{}": value'.format(path))
-            if show_values:
-                print('  -  self is: {}'.format( self.to_obj()))
-                print('  - other is: {}'.format(other.to_obj()))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'value',
+                    'self': self.to_obj(),
+                    'other': other.to_obj()
+                }]
+            else:
+                print('Diff at path "{}": value'.format(path))
+                print('  - ' +  self_name_padded + ' is: {}'.format( self.to_obj()))
+                print('  - ' + other_name_padded + ' is: {}'.format(other.to_obj()))
+                return True
 
-        return False
+        if return_diff:
+            return []
+        else:
+            return False
 
     def is_subset(self,other):
         return self.value == other.value
@@ -382,25 +447,49 @@ class TagList(_Tag):
     def to_obj(self):
         return [tag.to_obj() for tag in self.value]
 
-    def diff(self, other, order_matters=True, show_values=False, path=''):
+    def diff(self, other, self_name="self", other_name="other", order_matters=True, return_diff=False, path=''):
+        name_field = '{:>' + str(max(len(self_name), len(other_name), len('both'))) + '}'
+        self_name_padded  = name_field.format( self_name)
+        other_name_padded = name_field.format(other_name)
         if type(self) != type(other):
-            print('Diff at path "{}": type'.format(path))
-            if show_values:
-                print('  -  self is type: {}'.format(type( self)))
-                print('  - other is type: {}'.format(type(other)))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'type',
+                    'self': type(self),
+                    'other': type(other)
+                }]
+            else:
+                print('Diff at path "{}": type'.format(path))
+                print('  - ' +  self_name_padded + ' is type: {}'.format(type( self)))
+                print('  - ' + other_name_padded + ' is type: {}'.format(type(other)))
+                return True
 
         if len(self.value) != len(other.value):
-            print('Diff at path "{}": length'.format(path))
-            if show_values:
-                print('  -  self is length: {}'.format(len( self)))
-                print('  - other is length: {}'.format(len(other)))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'length',
+                    'self': len(self),
+                    'other': len(other)
+                }]
+            else:
+                print('Diff at path "{}": length'.format(path))
+                print('  - ' +  self_name_padded + ' is length: {}'.format(len( self)))
+                print('  - ' + other_name_padded + ' is length: {}'.format(len(other)))
+                return True
 
-        different = False
+        if return_diff:
+            difference = []
+        else:
+            difference = False
+
         for i in range(len(self.value)):
-            different |= self.value[i].diff(other.value[i], order_matters, show_values, '{}[{}]'.format(path,i))
-        return different
+            if return_diff:
+                difference += self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path,i))
+            else:
+                difference |= self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path,i))
+        return difference
 
     def is_subset(self,other):
         if type(other) != TagList:
@@ -548,39 +637,111 @@ class TagCompound(_Tag):
             else:
                 self.value[name] = new_tag
 
-    def diff(self, other, order_matters=True, show_values=True, path=''):
+    def diff(self, other, self_name="self", other_name="other", order_matters=True, return_diff=False, path=''):
+        name_field = '{:>' + str(max(len(self_name), len(other_name), len('both'))) + '}'
+        self_name_padded  = name_field.format( self_name)
+        other_name_padded = name_field.format(other_name)
+        both_name_padded = name_field.format('both')
         if type(self) != type(other):
-            print('Diff at path "{}": type'.format(path))
-            if show_values:
-                print('  -  self is type: {}'.format(type( self)))
-                print('  - other is type: {}'.format(type(other)))
-            return True
+            if return_diff:
+                return [{
+                    'path': path,
+                    'diff_type': 'type',
+                    'self': type(self),
+                    'other': type(other)
+                }]
+            else:
+                print('Diff at path "{}": type'.format(path))
+                print('  - ' +  self_name_padded + ' is type: {}'.format(type( self)))
+                print('  - ' + other_name_padded + ' is type: {}'.format(type(other)))
+                return True
 
-        own_keys = self.value.keys()
+        if return_diff:
+            difference = []
+        else:
+            difference = False
+
+        self_keys = self.value.keys()
         other_keys = other.value.keys()
-        # Order insensitive
-        if own_keys != other_keys:
-            print('Diff at path "{}": keys'.format(path))
-            if show_values:
-                print('  - both have keys: {}'.format(list(own_keys & other_keys)))
-                print('  -  self has keys: {}'.format(list(own_keys - other_keys)))
-                print('  - other has keys: {}'.format(list(other_keys - own_keys)))
-            return True
 
-        different = False
+        keys_common     = self_keys & other_keys
+        keys_only_self  = self_keys - other_keys
+        keys_only_other = other_keys - self_keys
+
+        # Order insensitive
+        if self_keys != other_keys:
+            if return_diff:
+                difference.append({
+                    'path': path,
+                    'diff_type': 'keys',
+                    'self': self_keys,
+                    'other': other_keys
+                })
+            else:
+                print('Diff at path "{}": keys'.format(path))
+                print('  - ' +  both_name_padded + ' have keys: {}'.format(list(keys_common    )))
+                print('  - ' +  self_name_padded + ' has keys:  {}'.format(list(keys_only_self )))
+                print('  - ' + other_name_padded + ' has keys:  {}'.format(list(keys_only_other)))
+                difference=True
+
         # Order sensitive
-        if order_matters and list(own_keys) != list(other_keys):
-            print('Diff at path "{}": key order'.format(path))
-            if show_values:
-                print('  -  self key order: {}'.format(own_keys))
-                print('  - other key order: {}'.format(other_keys))
-            different = True
+        order_self  = []
+        for key in self_keys:
+            if key in other_keys:
+                order_self.append(key)
+
+        order_other = []
+        for key in other_keys:
+            if key in self_keys:
+                order_other.append(key)
+
+        if order_matters and order_self != order_other:
+            if return_diff:
+                difference.append({
+                    'path': path,
+                    'diff_type': 'key_order',
+                    'self': order_self,
+                    'other': order_other
+                })
+            else:
+                print('Diff at path "{}": key_order'.format(path))
+                print('  - ' +  self_name_padded + ' key order: {}'.format(order_self ))
+                print('  - ' + other_name_padded + ' key order: {}'.format(order_other))
+                difference = True
 
         # Order insensitive
         conditional_dot = '' if len(path) == 0 else '.'
-        for key in self.value.keys():
-            different |= self.value[key].diff(other.value[key], order_matters, show_values, '{}{}{}'.format(path, conditional_dot, key))
-        return different
+        for key in keys_common:
+            if return_diff:
+                difference += self.value[key].diff(other.value[key], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path=path + conditional_dot + key)
+            else:
+                difference |= self.value[key].diff(other.value[key], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path=path + conditional_dot + key)
+
+        for key in keys_only_self:
+            if return_diff:
+                difference.append({
+                    'path': path + conditional_dot + key,
+                    'diff_type': 'missing_key',
+                    'self': self.value[key],
+                    'other': None
+                })
+            else:
+                print('Diff at path "{}": missing_key'.format(path + conditional_dot + key))
+                print('  - ' +  self_name_padded + ' value: {}'.format(self.value[key].to_mojangson(highlight=True)))
+
+        for key in keys_only_other:
+            if return_diff:
+                difference.append({
+                    'path': path + conditional_dot + key,
+                    'diff_type': 'missing_key',
+                    'self': None,
+                    'other': other.value[key]
+                })
+            else:
+                print('Diff at path "{}": missing_key'.format(path + conditional_dot + key))
+                print('  - ' +  other_name_padded + ' value: {}'.format(other.value[key].to_mojangson(highlight=True)))
+
+        return difference
 
     def is_subset(self,other):
         if type(other) != TagCompound:
