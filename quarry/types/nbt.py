@@ -712,7 +712,10 @@ class TagCompound(_Tag):
             regexLong           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)l$''', re.IGNORECASE)
 
             def __init__(self, json):
-                self.reader = StringReader(json)
+                if isinstance(json, StringReader):
+                    self.reader = json
+                else:
+                    self.reader = StringReader(json)
 
                 #########################################################
                 # Set to True for verbose parsing - useful to find errors

@@ -8,20 +8,20 @@ class StringReader(object):
     """
     regexUnquotedString = re.compile(r'''[-+._0-9A-Za-z]''')
 
-    def __init__(self,stringIn):
-        if type(stringIn) == str:
-            self.string = stringIn
-            self.cursor = 0
-        elif type(stringIn) == type(self):
+    def __init__(self, stringIn):
+        if isinstance(stringIn, type(self)):
             self.string = stringIn.string
             self.cursor = stringIn.cursor
+        elif isinstance(stringIn, str):
+            self.string = stringIn
+            self.cursor = 0
         else:
             raise TypeError('Cannot parse type ' + str(type(stringIn)))
 
     def getString(self):
         return self.string
 
-    def setCursor(self,cursor):
+    def setCursor(self, cursor):
         self.cursor = cursor
 
     def getRemainingLength(self):
@@ -45,10 +45,10 @@ class StringReader(object):
     def getRemaining(self):
         return self.string[self.cursor:]
 
-    def canRead(self,length=1):
+    def canRead(self, length=1):
         return self.cursor + length <= len(self.string)
 
-    def peek(self,offset=0):
+    def peek(self, offset=0):
         return self.string[self.cursor+offset]
 
     def read(self):
@@ -58,7 +58,7 @@ class StringReader(object):
     def skip(self):
         self.cursor += 1
 
-    def isAllowedNumber(self,c):
+    def isAllowedNumber(self, c):
         return c in '0123456789-.'
 
     def skipWhitespace(self):
@@ -124,7 +124,7 @@ class StringReader(object):
             cursor = start
             raise ValueError("could not parse '" + number + "' as a 32-bit IEEE float expresssed in base 10")
 
-    def isAllowedInUnquotedString(self,c):
+    def isAllowedInUnquotedString(self, c):
         return bool(self.regexUnquotedString.match(c))
 
     def readUnquotedString(self):
@@ -178,7 +178,7 @@ class StringReader(object):
             self.cursor = start
             raise SyntaxError("invalid boolean")
 
-    def expect(self,c):
+    def expect(self, c):
         if not self.canRead() or self.peek() != c:
             raise SyntaxError("Expected character '" + str(c) + "' at ->'" + self.string[self.cursor:] + "'")
         self.skip()
