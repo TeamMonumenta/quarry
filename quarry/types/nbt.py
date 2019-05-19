@@ -9,6 +9,8 @@ from brigadier.string_reader import StringReader
 from quarry.types.buffer import Buffer
 from quarry.types.text_format import ansify_text, get_format, unformat_text
 
+from hashlist import HashList
+
 _kinds = {}
 _ids = {}
 
@@ -190,9 +192,9 @@ class _ArrayTag(_Tag):
 
         for i in range(len(self.value)):
             if return_diff:
-                difference += self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path,i))
+                difference += self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path, i))
             else:
-                difference |= self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path,i))
+                difference |= self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path, i))
 
         return difference
 
@@ -465,30 +467,64 @@ class TagList(_Tag):
                 print('  - ' + other_name_padded + ' is type: {}'.format(type(other)))
                 return True
 
-        if len(self.value) != len(other.value):
-            if return_diff:
-                return [{
-                    'path': path,
-                    'diff_type': 'length',
-                    'self': len(self),
-                    'other': len(other)
-                }]
-            else:
-                print('Diff at path "{}": length'.format(path))
-                print('  - ' +  self_name_padded + ' is length: {}'.format(len( self)))
-                print('  - ' + other_name_padded + ' is length: {}'.format(len(other)))
-                return True
+        smart_diff = HashList(self.value).diff([HashList(other.value)])
 
         if return_diff:
             difference = []
-        else:
-            difference = False
+            for entry in smart_diff:
+                #self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path, i))
+                if entry['matches'][0] is None:
+                    difference += [{
+                        'path': '{}[{}]'.format(path, i),
+                        'diff_type': 'missing_entry',
+                        'self': entry['matches'][0],
+                        'other': entry['matches'][1],
+                        'value': entry['item']
+                    }]
 
-        for i in range(len(self.value)):
-            if return_diff:
-                difference += self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path,i))
-            else:
-                difference |= self.value[i].diff(other.value[i], self_name=self_name, other_name=other_name, order_matters=order_matters, return_diff=return_diff, path='{}[{}]'.format(path,i))
+                elif entry['matches'][1] is None:
+                    difference += [{
+                        'path': '{}[{}]'.format(path, i),
+                        'diff_type': 'missing_entry',
+                        'self': entry['matches'][0],
+                        'other': entry['matches'][1],
+                        'value': entry['item']
+                    }]
+
+                elif entry['matches'][0] != entry['matches'][1]:
+                    difference += [{
+                        'path': '{}[{}]'.format(path, i),
+                        'diff_type': 'order_mismatch',
+                        'self': entry['matches'][0],
+                        'other': entry['matches'][1],
+                        'value': entry['item']
+                    }]
+
+        else:
+            for entry in smart_diff:
+                if entry['matches'][0] is None:
+                    print('Diff at path "{}": missing_entry')
+                    print('  - ' +  self_name_padded + 'has no matching entry.')
+                    print('  - ' + other_name_padded + 'has entry at index {}.'.format(entry['matches'][1]))
+                    print('  - entry is: {}'.format(entry['item'].to_mojangson(highlight=True)))
+                    return True
+
+                elif entry['matches'][1] is None:
+                    print('Diff at path "{}": missing_entry')
+                    print('  - ' +  self_name_padded + 'has entry at index {}.'.format(entry['matches'][0]))
+                    print('  - ' + other_name_padded + 'has no matching entry.')
+                    print('  - entry is: {}'.format(entry['item'].to_mojangson(highlight=True)))
+                    return True
+
+                elif entry['matches'][0] != entry['matches'][1]:
+                    print('Diff at path "{}": order_mismatch')
+                    print('  - ' +  self_name_padded + 'has entry at index {}.'.format(entry['matches'][0]))
+                    print('  - ' + other_name_padded + 'has entry at index {}.'.format(entry['matches'][1]))
+                    print('  - entry is: {}'.format(entry['item'].to_mojangson(highlight=True)))
+                    return True
+
+            return False
+
         return difference
 
     def is_subset(self,other):
