@@ -501,29 +501,28 @@ class TagList(_Tag):
                     }]
 
         else:
+            difference = False
             for entry in smart_diff:
                 if entry['matches'][0] is None:
-                    print('Diff at path "{}": missing_entry')
-                    print('  - ' +  self_name_padded + 'has no matching entry.')
-                    print('  - ' + other_name_padded + 'has entry at index {}.'.format(entry['matches'][1]))
+                    print('Diff at path "{}": missing_entry'.format(path))
+                    print('  - ' +  self_name_padded + ' has no matching entry.')
+                    print('  - ' + other_name_padded + ' has entry at index {}.'.format(entry['matches'][1]))
                     print('  - entry is: {}'.format(entry['item'].to_mojangson(highlight=True)))
-                    return True
+                    difference = True
 
                 elif entry['matches'][1] is None:
-                    print('Diff at path "{}": missing_entry')
-                    print('  - ' +  self_name_padded + 'has entry at index {}.'.format(entry['matches'][0]))
-                    print('  - ' + other_name_padded + 'has no matching entry.')
+                    print('Diff at path "{}": missing_entry'.format(path))
+                    print('  - ' +  self_name_padded + ' has entry at index {}.'.format(entry['matches'][0]))
+                    print('  - ' + other_name_padded + ' has no matching entry.')
                     print('  - entry is: {}'.format(entry['item'].to_mojangson(highlight=True)))
-                    return True
+                    difference = True
 
                 elif entry['matches'][0] != entry['matches'][1]:
-                    print('Diff at path "{}": order_mismatch')
-                    print('  - ' +  self_name_padded + 'has entry at index {}.'.format(entry['matches'][0]))
-                    print('  - ' + other_name_padded + 'has entry at index {}.'.format(entry['matches'][1]))
+                    print('Diff at path "{}": order_mismatch'.format(path))
+                    print('  - ' +  self_name_padded + ' has entry at index {}.'.format(entry['matches'][0]))
+                    print('  - ' + other_name_padded + ' has entry at index {}.'.format(entry['matches'][1]))
                     print('  - entry is: {}'.format(entry['item'].to_mojangson(highlight=True)))
-                    return True
-
-            return False
+                    difference = True
 
         return difference
 
