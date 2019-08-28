@@ -1112,6 +1112,81 @@ class RegionFile(object):
             return None
 
 
+    def restore_chunk(self, old_region, chunk_x, chunk_z):
+        """
+        Restore the same chunk from an older region file as fast as possible.
+
+        Returns True if successful, otherwise False.
+        """
+        buff = Buffer()
+
+        # Read extent header
+        old_region.fd.seek(4 * (32 * chunk_z + chunk_x))
+        buff.add(old_region.fd.read(4))
+        entry = buff.unpack('I')
+        chunk_offset, chunk_length = entry >> 8, entry & 0xFF
+
+        if not entry:
+            # TODO Delete the chunk in the new region file.
+            return False
+
+        # Read chunk
+        old_region.fd.seek(4096 * chunk_offset)
+        buff.add(old_region.fd.read(4096 * chunk_length))
+        old_chunk = buff.read(buff.unpack('IB')[0])
+
+        # Skip decompression/unpacking/packing/compression
+
+        # Delete any variables that shouldn't carry forward.
+        del buff
+        del entry
+        del chunk_offset
+
+        # Save the region file back.
+        chunk = Buffer.pack('IB', len(old_chunk), 2) + old_chunk
+
+        # Load extents (The header and chunk offsets and lengths, ignoring the chunk being saved.)
+        extents = [(0, 2)]
+        self.fd.seek(0)
+        buff = Buffer(self.fd.read(4096))
+        for idx in range(1024):
+            z, x = divmod(idx, 32)
+            entry = buff.unpack('I')
+            offset, length = entry >> 8, entry & 0xFF
+            if offset > 0 and not (x == chunk_x and z == chunk_z):
+                extents.append((offset, length))
+        extents.sort()
+        extents.append((extents[-1][0] + extents[-1][1] + chunk_length, 0))
+
+        # Compute new extent
+        for idx in range(len(extents) - 1):
+            start = extents[idx][0] + extents[idx][1]
+            end = extents[idx+1][0]
+            if (end - start) >= chunk_length:
+                chunk_offset = start
+                extents.insert(idx+1, (chunk_offset, chunk_length))
+                break
+
+        # Write extent header
+        self.fd.seek(4 * (32 * chunk_z + chunk_x))
+        self.fd.write(Buffer.pack(
+            'I', (chunk_offset << 8) | (chunk_length & 0xFF)))
+
+        # Write timestamp header
+        self.fd.seek(4096 + 4 * (32 * chunk_z + chunk_x))
+        self.fd.write(Buffer.pack('I', int(time.time())))
+
+        # Write chunk
+        self.fd.seek(4096 * chunk_offset)
+        self.fd.write(chunk)
+
+        # Truncate file
+        self.fd.seek(4096 * extents[-1][0])
+        self.fd.truncate()
+
+        return True
+
+
 # Debug -----------------------------------------------------------------------
 
 def alt_repr(tag, level=0):
