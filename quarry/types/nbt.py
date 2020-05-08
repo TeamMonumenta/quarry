@@ -8,6 +8,7 @@ import zlib
 from brigadier.string_reader import StringReader
 from quarry.types.buffer import Buffer
 from quarry.types.text_format import ansify_text, get_format, unformat_text
+from quarry.types.chunk import PackedArray
 
 _kinds = {}
 _ids = {}
@@ -115,7 +116,7 @@ class _DataTag(_Tag):
 
 
 class _ArrayTag(_Tag):
-    fmt = None
+    width = None
     separator = (',',get_format('white').ansi_code+', ')
 
     def __len__(self):
@@ -123,13 +124,17 @@ class _ArrayTag(_Tag):
 
     @classmethod
     def from_buff(cls, buff):
-        array_length = buff.unpack('i')
-        return cls(list(buff.unpack_array(cls.fmt, array_length)))
+        return cls(PackedArray.from_bytes(
+            bytes=buff.read(buff.unpack('i') * (cls.width // 8)),
+            sector_width=cls.width))
 
     def to_bytes(self):
-        return (
-            Buffer.pack('i', len(self.value)) +
-            Buffer.pack_array(self.fmt, self.value))
+        data = self.value.to_bytes()
+        data = Buffer.pack('i', len(data) // (self.width // 8)) + data
+        return data
+
+    def to_obj(self):
+        return list(self.value)
 
     def diff(self, other, order_matters=True, show_values=False, path=''):
         if type(self) != type(other):
@@ -325,7 +330,7 @@ class TagString(_Tag):
 
 
 class TagByteArray(_ArrayTag):
-    fmt = 'b'
+    width = 8
     prefix = ('[B;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'B'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
     postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
     separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
@@ -333,7 +338,7 @@ class TagByteArray(_ArrayTag):
 
 
 class TagIntArray(_ArrayTag):
-    fmt = 'i'
+    width = 32
     prefix = ('[I;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'I'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
     postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
     separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
@@ -341,15 +346,7 @@ class TagIntArray(_ArrayTag):
 
 
 class TagLongArray(_ArrayTag):
-    fmt = 'q'
-    prefix = ('[L;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
-    postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
-    separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
-    type_postfix = ('l',get_format('red').ansi_code+'l')
-
-
-class TagUnsignedLongArray(_ArrayTag):
-    fmt = 'Q'
+    width = 64
     prefix = ('[L;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
     postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
     separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
@@ -507,15 +504,6 @@ class TagCompound(_Tag):
                 return cls(value)
             kind = _kinds[kind_id]
             name = TagString.from_buff(buff).value
-
-            # ~~ Evil Hack Alert ~~
-            # Signed bitwise arithmetic in Python is simultaneously elegant and
-            # baffling. Special-case the BlockStates array to use /unsigned/
-            # integers, in contravention of spec, but to the great relief of
-            # this programmer.
-            if kind is TagLongArray and name == "BlockStates":
-                kind = TagUnsignedLongArray
-
             tag = kind.from_buff(buff)
             value[name] = tag
             if cls.root:
@@ -952,6 +940,10 @@ class TagCompound(_Tag):
 class TagRoot(TagCompound):
     root = True
 
+    @classmethod
+    def from_body(cls, body):
+        return cls({u"": body})
+
     @property
     def body(self):
         return self.value[u""]
@@ -973,7 +965,6 @@ _kinds[10] = TagCompound
 _kinds[11] = TagIntArray
 _kinds[12] = TagLongArray
 _ids.update({v: k for k, v in _kinds.items()})
-_ids[TagUnsignedLongArray] = 12
 
 
 # Files -----------------------------------------------------------------------
@@ -1098,6 +1089,8 @@ class RegionFile(object):
         buff.add(self.fd.read(4))
         entry = buff.unpack('I')
         chunk_offset, chunk_length = entry >> 8, entry & 0xFF
+        if chunk_offset == 0:
+            raise ValueError((chunk_x, chunk_z))
 
         if entry:
             # Read chunk
@@ -1185,6 +1178,20 @@ class RegionFile(object):
         self.fd.truncate()
 
         return True
+
+    def load_chunk_section(self, chunk_x, chunk_y, chunk_z):
+        """
+        Loads the chunk section at the given co-ordinates from the region file.
+        The co-ordinates should range from 0 to 31. Returns a ``TagRoot``.
+        """
+
+        chunk = self.load_chunk(chunk_x, chunk_z)
+        sections = chunk.body.value["Level"].value["Sections"].value
+        for section in sections:
+            if section.value["Y"].value == chunk_y:
+                return chunk, section
+
+        raise ValueError((chunk_x, chunk_y, chunk_z))
 
 
 # Debug -----------------------------------------------------------------------

@@ -1,5 +1,5 @@
 from quarry.types.buffer.v1_9 import Buffer1_9
-from quarry.types.block import OpaqueBlockMap
+from quarry.types.registry import OpaqueRegistry
 
 # Python 3 compat
 try:
@@ -9,7 +9,7 @@ except NameError:
 
 
 class Buffer1_13(Buffer1_9):
-    block_map = OpaqueBlockMap(14)
+    registry = OpaqueRegistry(14)
 
     # Chunk section -----------------------------------------------------------
 
@@ -22,8 +22,8 @@ class Buffer1_13(Buffer1_9):
             return cls.pack_varint(len(palette)) + b"".join(
                 cls.pack_varint(x) for x in palette)
 
-    def unpack_chunk_section_palette(self, bits):
-        if bits > 8:
+    def unpack_chunk_section_palette(self, value_width):
+        if value_width > 8:
             return []
         else:
             return [self.unpack_varint() for _ in xrange(self.unpack_varint())]
@@ -39,7 +39,7 @@ class Buffer1_13(Buffer1_9):
         if item is None:
             return cls.pack('h', -1)
 
-        item_id = cls.block_map.encode_item(item)
+        item_id = cls.registry.encode('minecraft:item', item)
         return cls.pack('hb', item_id, count) + cls.pack_nbt(tag)
 
     def unpack_slot(self):
@@ -52,7 +52,7 @@ class Buffer1_13(Buffer1_9):
         if item_id == -1:
             slot['item'] = None
         else:
-            slot['item'] = self.block_map.decode_item(item_id)
+            slot['item'] = self.registry.decode('minecraft:item', item_id)
             slot['count'] = self.unpack('b')
             slot['tag'] = self.unpack_nbt()
         return slot
@@ -78,10 +78,10 @@ class Buffer1_13(Buffer1_9):
             elif ty == 5:  out += cls.pack_optional(cls.pack_chat, val)
             elif ty == 6:  out += cls.pack_slot(**val)
             elif ty == 7:  out += cls.pack('?', val)
-            elif ty == 8:  out += cls.pack('fff', *val)
+            elif ty == 8:  out += cls.pack_rotation(*val)
             elif ty == 9:  out += cls.pack_position(*val)
             elif ty == 10: out += cls.pack_optional(pack_position, val)
-            elif ty == 11: out += cls.pack_varint(val)
+            elif ty == 11: out += cls.pack_direction(val)
             elif ty == 12: out += cls.pack_optional(cls.pack_uuid, val)
             elif ty == 13: out += cls.pack_block(val)
             elif ty == 14: out += cls.pack_nbt(val)
@@ -109,10 +109,10 @@ class Buffer1_13(Buffer1_9):
             elif ty == 5:  val = self.unpack_optional(self.unpack_chat)
             elif ty == 6:  val = self.unpack_slot()
             elif ty == 7:  val = self.unpack('?')
-            elif ty == 8:  val = self.unpack('fff')
+            elif ty == 8:  val = self.unpack_rotation()
             elif ty == 9:  val = self.unpack_position()
             elif ty == 10: val = self.unpack_optional(self.unpack_position)
-            elif ty == 11: val = self.unpack_varint()
+            elif ty == 11: val = self.unpack_direction()
             elif ty == 12: val = self.unpack_optional(self.unpack_uuid)
             elif ty == 13: val = self.unpack_block()
             elif ty == 14: val = self.unpack_nbt()
@@ -127,6 +127,7 @@ class Buffer1_13(Buffer1_9):
         """
         Packs a particle.
         """
+
         data = data or {}
         out = cls.pack_varint(id)
         if id == 3 or id == 20:
@@ -141,10 +142,13 @@ class Buffer1_13(Buffer1_9):
         elif id == 27:
             out += cls.pack_slot(**data['item'])
 
+        return out
+
     def unpack_particle(self):
         """
         Unpacks a particle. Returns an ``(id, data)`` pair.
         """
+
         id = self.unpack_varint()
         if id == 3 or id == 20:
             data = {'block_state': self.unpack_varint()}
@@ -249,7 +253,11 @@ class Buffer1_13(Buffer1_9):
         nodes = [root_node]
         idx = 0
         while idx < len(nodes):
-            children = nodes[idx]['children'].values()
+            node = nodes[idx]
+            children = list(node['children'].values())
+            if node['redirect']:
+                children.append(node['redirect'])
+
             for child in children:
                 if child not in nodes:
                     nodes.append(child)
@@ -331,3 +339,83 @@ class Buffer1_13(Buffer1_9):
                 out += cls.pack('?', properties['allow_decimals'])
 
         return out
+
+    # Recipes -----------------------------------------------------------------
+
+    def unpack_recipe(self):
+        """
+        Unpacks a crafting recipe.
+        """
+        recipe = {}
+        recipe['name'] = self.unpack_string()
+        recipe['type'] = self.unpack_string()
+
+        if recipe['type'] == 'crafting_shapeless':
+            recipe['group'] = self.unpack_string()
+            recipe['ingredients'] = [
+                self.unpack_ingredient() for _ in range(self.unpack_varint())]
+            recipe['result'] = self.unpack_slot()
+
+        elif recipe['type'] == 'crafting_shaped':
+            recipe['width'] = self.unpack_varint()
+            recipe['height'] = self.unpack_varint()
+            recipe['group'] = self.unpack_string()
+            recipe['ingredients'] = [
+                self.unpack_ingredient() for _ in range(recipe['width'] *
+                                                    recipe['height'])]
+            recipe['result'] = self.unpack_slot()
+        elif recipe['type'] == 'smelting':
+            recipe['group'] = self.unpack_string()
+            recipe['ingredient'] = self.unpack_ingredient()
+            recipe['result'] = self.unpack_slot()
+            recipe['experience'] = self.unpack('f')
+            recipe['cooking_time'] = self.unpack_varint()
+
+        return recipe
+
+    @classmethod
+    def pack_recipe(cls, name, type, **recipe):
+        """
+        Packs a crafting recipe.
+        """
+        data = cls.pack_string(name) + cls.pack_string(type)
+
+        if type == 'crafting_shapeless':
+            data += cls.pack_string(recipe['group'])
+            data += cls.pack_varint(len(recipe['ingredients']))
+            for ingredient in recipe['ingredients']:
+                data += cls.pack_ingredient(ingredient)
+            data += cls.pack_slot(**recipe['result'])
+
+        elif type == 'crafting_shaped':
+            data += cls.pack_varint(recipe['width'])
+            data += cls.pack_varint(recipe['height'])
+            data += cls.pack_string(recipe['group'])
+            for ingredient in recipe['ingredients']:
+                data += cls.pack_ingredient(ingredient)
+            data += cls.pack_slot(**recipe['result'])
+
+        elif type == 'smelting':
+            data += cls.pack_string(recipe['group'])
+            data += cls.pack_ingredient(recipe['ingredient'])
+            data += cls.pack_slot(**recipe['result'])
+            data += cls.pack('f', recipe['experience'])
+            data += cls.pack_varint(recipe['cooking_time'])
+
+        return data
+
+    def unpack_ingredient(self):
+        """
+        Unpacks a crafting recipe ingredient alternation.
+        """
+        return [self.unpack_slot() for _ in range(self.unpack_varint())]
+
+    @classmethod
+    def pack_ingredient(cls, ingredient):
+        """
+        Packs a crafting recipe ingredient alternation.
+        """
+        data = cls.pack_varint(len(ingredient))
+        for slot in ingredient:
+            data += cls.pack_slot(**slot)
+        return data

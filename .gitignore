@@ -3,10 +3,13 @@ xunit-*.xml
 docs/_build
 MANIFEST
 dist
-env*
+venv
 build
 notes
 .cache
 .coverage
 .idea
+.pytest_cache
+.tox
+quarry.egg-info
 docs/networking/packet_names.rst

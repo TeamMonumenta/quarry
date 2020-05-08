@@ -42,12 +42,13 @@ varint_vectors = [
 ]
 slot_vectors = [
     # Empty slot
-    ({'item': None}, b'\xFF\xFF'),
+    ({'item': None}, b'\x00'),
 
     # 20 stone blocks
     ({'item': 276, 'count': 20, 'tag': TagRoot({})},
 
-        b'\x01\x14' # ID
+        b'\x01'     # Present
+        b'\x94\x02' # ID
         b'\x14'     # Count
         b'\x00'),   # NBT
 
@@ -58,7 +59,8 @@ slot_vectors = [
                  (u'id', TagShort(16)),
                  (u'lvl', TagShort(4)))))])})})},  # hmm
 
-        b'\x01\x14' # ID
+        b'\x01'     # Present
+        b'\x94\x02' # ID
         b'\x01'     # Count
         b'\x0A\x00\x00\x09\x00\x04ench\n\x00\x00\x00\x01' # NBT container start
         b'\x02\x00\x02id\x00\x10'                         # Enchantment type
@@ -75,12 +77,12 @@ entity_metadata_vectors = [
         ((5, 5), Message({'text': u'five'})),
         ((6, 6), {'count': 1, 'item': 267, 'tag': TagRoot({})}),
         ((7, 7), True),
-        ((8, 8), (7.699999809265137, 7.699999809265137, 7.699999809265137)),
-        ((9, 9), (8, 8, 8)),
-        ((10, 10), (9, 9, 9)),
-        ((11, 11), 10),
+        ((8, 8), (8, 8, 8)),
+        ((9, 9), (9, 9, 9)),
+        ((10, 10), (10, 10, 10)),
+        ((11, 11), 'north'),
         ((12, 12), UUID.from_bytes(uuid_vector)),
-        ((13, 13), 12),
+        ((13, 13), 13),
         ((14, 14), TagRoot({u'foo': TagString(u'bar')})))),
 
         b'\x00\x00\x00'
@@ -89,14 +91,14 @@ entity_metadata_vectors = [
         b'\x03\x03\x05three'
         b'\x04\x04\x10{"text": "four"}'
         b'\x05\x05\x01\x10{"text": "five"}'
-        b'\x06\x06\x01\x0b\x01\x00'
+        b'\x06\x06\x01\x8b\x02\x01\x00'
         b'\x07\x07\x01'
-        b'\x08\x08\x40\xf6\x66\x66\x40\xf6\x66\x66\x40\xf6\x66\x66'
-        b'\x09\x09\x00\x00\x02\x00\x20\x00\x00\x08'
-        b'\x0a\x0a\x01\x00\x00\x02\x40\x24\x00\x00\x09'
-        b'\x0b\x0b\x0a'
+        b'\x08\x08\x41\x00\x00\x00\x41\x00\x00\x00\x41\x00\x00\x00'
+        b'\x09\x09\x00\x00\x02\x40\x00\x00\x90\x09'
+        b'\x0a\x0a\x01\x00\x00\x02\x80\x00\x00\xa0\x0a'
+        b'\x0b\x0b\x02'
         b'\x0c\x0c\x01' + uuid_vector +
-        b'\x0d\x0d\x0c'
+        b'\x0d\x0d\x0d'
         b'\x0e\x0e\x08\x00\x03foo\x00\x03bar'
         b'\xff')
 ]

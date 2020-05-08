@@ -2,7 +2,7 @@ from distutils.core import setup
 
 setup(
     name='quarry',
-    version='1.1.1',
+    version='1.5.1',
     author='Barney Gale',
     author_email='barney@barneygale.co.uk',
     url='https://github.com/barneygale/quarry',
@@ -10,6 +10,8 @@ setup(
     description='Minecraft protocol library',
     long_description=open('README.rst').read(),
     install_requires=[
+        'bitstring >= 3.1.0',
+        'cached_property >= 1.2.0',
         'twisted >= 13.0.0',
         'cryptography >= 0.9',
         'pyOpenSSL >= 0.15.1',
