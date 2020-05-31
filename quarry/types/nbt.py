@@ -691,13 +691,13 @@ class TagCompound(_Tag):
             into Quarry's NBT format
             """
 
-            regexFloat          = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.]?)(?:e[-+]?[0-9]+)?f$''', re.IGNORECASE)
-            regexDouble         = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.]?)(?:e[-+]?[0-9]+)?d$''', re.IGNORECASE)
-            regexDoubleNoSuffix = re.compile(r'''[-+]?(?:[0-9]*[.][0-9]+|[0-9]+[.])(?:e[-+]?[0-9]+)?$''', re.IGNORECASE)
-            regexByte           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)b$''', re.IGNORECASE)
-            regexShort          = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)s$''', re.IGNORECASE)
-            regexInt            = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)$''', re.IGNORECASE)
-            regexLong           = re.compile(r'''[-+]?(?:0|[1-9][0-9]*)l$''', re.IGNORECASE)
+            regexDoubleNoSuffix = re.compile(r'''^[-+]?([0-9]+[.]|[0-9]*[.][0-9]+)(e[-+]?[0-9]+)?$''', re.IGNORECASE)
+            regexDouble         = re.compile(r'''^[-+]?([0-9]+[.]?|[0-9]*[.][0-9]+)(e[-+]?[0-9]+)?d$''', re.IGNORECASE)
+            regexFloat          = re.compile(r'''^[-+]?([0-9]+[.]?|[0-9]*[.][0-9]+)(e[-+]?[0-9]+)?f$''', re.IGNORECASE)
+            regexByte           = re.compile(r'''^[-+]?(0|[1-9][0-9]*)b$''', re.IGNORECASE)
+            regexLong           = re.compile(r'''^[-+]?(0|[1-9][0-9]*)l$''', re.IGNORECASE)
+            regexShort          = re.compile(r'''^[-+]?(0|[1-9][0-9]*)s$''', re.IGNORECASE)
+            regexInt            = re.compile(r'''^[-+]?(0|[1-9][0-9]*)$''', re.IGNORECASE)
 
             def __init__(self, json):
                 if isinstance(json, StringReader):
@@ -719,7 +719,6 @@ class TagCompound(_Tag):
                 else:
                     return self.reader.readString()
 
-            # TODO: Need to check these sizes correctly!
             def parse_literal(self, literal_str):
                 if self.debug:
                     print("parse_literal")
@@ -760,13 +759,13 @@ class TagCompound(_Tag):
                 self.reader.skipWhitespace()
                 orig_pos = self.reader.getCursor()
 
-                if self.reader.peek() == '"':
+                if StringReader.isQuotedStringStart(self.reader.peek()):
                     return TagString(self.reader.readQuotedString())
                 else:
                     val = self.reader.readUnquotedString()
 
                     if not val:
-                        self.reader.setCursor(i)
+                        self.reader.setCursor(orig_pos)
                         self.raise_error("Failed to parse literal or string value")
                     else:
                         return self.parse_literal(val)
@@ -782,17 +781,16 @@ class TagCompound(_Tag):
                     nextChar = self.reader.peek()
                     if nextChar == '{':
                         return self.parse_compound()
+                    elif nextChar == '[':
+                        return self.parse_array()
                     else:
-                        if nextChar == '[':
-                            return self.parse_array()
-                        else:
-                            return self.parse_literal_or_string()
+                        return self.parse_literal_or_string()
 
             def parse_array(self):
                 if self.debug:
                     print("parse_array")
 
-                if self.reader.canRead(3) and self.reader.peek(1) != '"' and self.reader.peek(2) == ';':
+                if self.reader.canRead(3) and (not StringReader.isQuotedStringStart(self.reader.peek(1))) and self.reader.peek(2) == ';':
                     return self.parse_typed_numeric_array()
                 else:
                     return self.parse_non_numeric_array()
@@ -911,7 +909,6 @@ class TagCompound(_Tag):
 
                 self.advance_and_fail_if_next_is_not('}')
                 return TagCompound(compound)
-
 
             def seek_to_next_comma_delim_element(self):
                 if self.debug:

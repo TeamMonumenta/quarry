@@ -58,8 +58,13 @@ class StringReader(object):
     def skip(self):
         self.cursor += 1
 
-    def isAllowedNumber(self, c):
+    @classmethod
+    def isAllowedNumber(cls, c):
         return c in '0123456789-.'
+
+    @classmethod
+    def isQuotedStringStart(cls, c):
+        return c == "'" or c == '"'
 
     def skipWhitespace(self):
         while self.canRead() and self.peek().isspace():
@@ -136,15 +141,19 @@ class StringReader(object):
     def readQuotedString(self):
         if not self.canRead():
             return ""
-        elif self.peek() != '"':
-            raise SyntaxError("enexpected start of quote")
+        nxt = self.peek()
+        if not self.isQuotedStringStart(nxt):
+            raise SyntaxError("Expected quotes to begin string, got '" + c + "'")
         self.skip()
+        return self.readStringUntil(nxt)
+
+    def readStringUntil(self, terminator):
         result = ''
         escaped = False
         while self.canRead():
             c = self.read()
             if escaped:
-                if c in '"\\':
+                if c == terminator or c == '\\':
                     result += c
                     escaped = False
                 else:
@@ -152,7 +161,7 @@ class StringReader(object):
                     raise SyntaxError("Unexpected escaped character '" + c + "'")
             elif c == '\\':
                 escaped = True
-            elif c == '"':
+            elif c == terminator:
                 return result
             else:
                 result += c
@@ -160,10 +169,13 @@ class StringReader(object):
         raise SyntaxError("expected end quote")
 
     def readString(self):
-        if self.canRead() and self.peek == '"':
-            return self.readQuotedString()
-        else:
-            return self.readUnquotedString()
+        if not self.canRead():
+            return ""
+        nxt = self.peek()
+        if self.isQuotedStringStart(nxt):
+            self.skip()
+            return self.readStringUntil(nxt)
+        return self.readUnquotedString()
 
     def readBoolean(self):
         start = self.cursor
