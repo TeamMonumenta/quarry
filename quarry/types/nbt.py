@@ -1090,15 +1090,30 @@ class RegionFile(object):
         entry = buff.unpack('I')
         chunk_offset, chunk_length = entry >> 8, entry & 0xFF
         if chunk_offset == 0:
-            raise ValueError((chunk_x, chunk_z))
+            #raise ValueError((chunk_x, chunk_z))
+            return None
 
         if entry:
+            debug_off_by_one = False
+
             # Read chunk
             self.fd.seek(4096 * chunk_offset)
             buff.add(self.fd.read(4096 * chunk_length))
-            chunk = buff.read(buff.unpack('IB')[0])
+            compressed_size, compression_format = buff.unpack('IB')
+            pos = buff.pos
+            try:
+                chunk = buff.read(compressed_size)
+            except:
+                debug_off_by_one = True
+                compressed_size -= 1 # Fix off by 1 error during read
+                buff.pos = pos
+                chunk = buff.read(compressed_size)
             chunk = zlib.decompress(chunk)
             chunk = TagRoot.from_bytes(chunk)
+            if debug_off_by_one:
+                x = 16 * chunk.body.at_path('Level.xPos').value
+                z = 16 * chunk.body.at_path('Level.zPos').value
+                print(f'tp @s {x} 256 {z}')
             return chunk
         else:
             # No chunk at that location
