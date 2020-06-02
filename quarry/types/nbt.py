@@ -842,11 +842,11 @@ class TagCompound(_Tag):
                 if not self.reader.canRead():
                     self.raise_error("Unexpected end of numeric array")
                 elif first_char == 'B':
-                    return TagByteArray(self.parse_numeric_array_as_type(TagByte))
+                    return TagByteArray(PackedArray.from_int_list(self.parse_numeric_array_as_type(TagByte), 8))
                 elif first_char == 'L':
-                    return TagLongArray(self.parse_numeric_array_as_type(TagLong))
+                    return TagLongArray(PackedArray.from_int_list(self.parse_numeric_array_as_type(TagLong), 64))
                 elif first_char == 'I':
-                    return TagIntArray(self.parse_numeric_array_as_type(TagInt))
+                    return TagIntArray(PackedArray.from_int_list(self.parse_numeric_array_as_type(TagInt), 32))
                 else:
                     self.reader.setCursor(orig_pos)
                     self.raise_error("Unexpected type character '" + first_char + "' in numeric array")

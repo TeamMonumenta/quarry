@@ -140,6 +140,23 @@ class PackedArray(Sequence):
         return cls(storage, sector_width, value_width, False)
 
     @classmethod
+    def from_int_list(cls, lst, value_width):
+        """
+        Pack a list of integers into a BitArray
+        """
+
+        # Create an empty bit array big enough to hold all the data
+        storage = BitArray()
+
+        # Populate the array
+        offset = 0
+        for item in lst:
+            storage.append(BitArray(int=item, length=value_width))
+            offset += value_width
+
+        return cls(storage, value_width, value_width, False)
+
+    @classmethod
     def from_light_bytes(cls, bytes):
         """
         Deserialize a packed array from the given light data bytes.
