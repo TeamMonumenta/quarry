@@ -344,6 +344,9 @@ class BlockArray(Sequence):
         for block data and the palette. Minecraft 1.13+ only.
         """
 
+        if 'Palette' not in section.value and 'BlockStates' not in section.value:
+            return cls.empty(registry, non_air)
+
         nbt_palette = section.value['Palette']
         if isinstance(nbt_palette.value, _NBTPaletteProxy):
             proxy = nbt_palette.value
