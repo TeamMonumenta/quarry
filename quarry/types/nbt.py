@@ -17,6 +17,8 @@ _ids = {}
 
 @functools.total_ordering
 class _Tag(object):
+    __slots__ = ('value',)
+
     def __init__(self, value):
         self.value = value
 
@@ -73,6 +75,7 @@ class _Tag(object):
 
 
 class _DataTag(_Tag):
+    __slots__ = ()
     fmt = None
 
     @classmethod
@@ -116,6 +119,7 @@ class _DataTag(_Tag):
 
 
 class _ArrayTag(_Tag):
+    __slots__ = ()
     width = None
     separator = (',',get_format('white').ansi_code+', ')
 
@@ -244,36 +248,43 @@ class _ArrayTag(_Tag):
 # NBT tags --------------------------------------------------------------------
 
 class TagByte(_DataTag):
+    __slots__ = ()
     fmt = 'b'
     postfix = ('b',get_format('red').ansi_code+'b'+get_format('reset').ansi_code)
 
 
 class TagShort(_DataTag):
+    __slots__ = ()
     fmt = 'h'
     postfix = ('s',get_format('red').ansi_code+'s'+get_format('reset').ansi_code)
 
 
 class TagInt(_DataTag):
+    __slots__ = ()
     fmt = 'i'
     postfix = ('',get_format('reset').ansi_code)
 
 
 class TagLong(_DataTag):
+    __slots__ = ()
     fmt = 'q'
     postfix = ('L',get_format('red').ansi_code+'L'+get_format('reset').ansi_code)
 
 
 class TagFloat(_DataTag):
+    __slots__ = ()
     fmt = 'f'
     postfix = ('f',get_format('red').ansi_code+'f'+get_format('reset').ansi_code)
 
 
 class TagDouble(_DataTag):
+    __slots__ = ()
     fmt = 'd'
     postfix = ('d',get_format('red').ansi_code+'d'+get_format('reset').ansi_code)
 
 
 class TagString(_Tag):
+    __slots__ = ()
     prefix = ('"',get_format('white').ansi_code+'"'+get_format('green').ansi_code)
     postfix = ('"',get_format('white').ansi_code+'"'+get_format('reset').ansi_code)
 
@@ -330,6 +341,7 @@ class TagString(_Tag):
 
 
 class TagByteArray(_ArrayTag):
+    __slots__ = ()
     width = 8
     prefix = ('[B;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'B'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
     postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
@@ -338,6 +350,7 @@ class TagByteArray(_ArrayTag):
 
 
 class TagIntArray(_ArrayTag):
+    __slots__ = ()
     width = 32
     prefix = ('[I;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'I'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
     postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
@@ -346,6 +359,7 @@ class TagIntArray(_ArrayTag):
 
 
 class TagLongArray(_ArrayTag):
+    __slots__ = ()
     width = 64
     prefix = ('[L;',get_format('white').ansi_code+'['+get_format('red').ansi_code+'L'+get_format('white').ansi_code+'; '+get_format('gold').ansi_code)
     postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
@@ -354,6 +368,7 @@ class TagLongArray(_ArrayTag):
 
 
 class TagList(_Tag):
+    __slots__ = ()
     prefix = ('[',get_format('white').ansi_code+'['+get_format('gold').ansi_code)
     postfix = (']',get_format('white').ansi_code+']'+get_format('reset').ansi_code)
     separator = (',',get_format('white').ansi_code+', '+get_format('gold').ansi_code)
@@ -484,6 +499,8 @@ class TagList(_Tag):
 
 
 class TagCompound(_Tag):
+    __slots__ = ()
+
     root = False
     preserve_order = True
     prefix = ('{',get_format('white').ansi_code+'{'+get_format('gold').ansi_code)
@@ -935,6 +952,7 @@ class TagCompound(_Tag):
         return MojangsonParser(json).parse_compound()
 
 class TagRoot(TagCompound):
+    __slots__ = ()
     root = True
 
     @classmethod
