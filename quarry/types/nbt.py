@@ -179,6 +179,9 @@ class _ArrayTag(_Tag):
 
         inner_mojangson = []
         for content in self.value:
+            # Converted packed unsigned values to signed values
+            if content >= (1<<(self.width - 1)):
+                content -= (1<<(self.width))
             inner_mojangson.append( str(content) + type_postfix )
         return prefix + separator.join(inner_mojangson) + postfix
 
