@@ -1186,11 +1186,11 @@ class MojangsonParser(object):
         if self.debug:
             print("parse_key_string")
 
-        self.reader.skipWhitespace()
+        self.reader.skip_whitespace()
         if not self.reader.can_read():
             self.raise_error("Failed to parse TagCompound key")
         else:
-            return self.reader.readString()
+            return self.reader.read_string()
 
     def parse_literal(self, literal_str):
         if self.debug:
@@ -1229,16 +1229,16 @@ class MojangsonParser(object):
         if self.debug:
             print("parse_literal_or_string")
 
-        self.reader.skipWhitespace()
+        self.reader.skip_whitespace()
         orig_pos = self.reader.get_cursor()
 
-        if StringReader.isQuotedStringStart(self.reader.peek()):
-            return TagString(self.reader.readQuotedString())
+        if StringReader.is_quoted_string_start(self.reader.peek()):
+            return TagString(self.reader.read_quoted_string())
         else:
-            val = self.reader.readUnquotedString()
+            val = self.reader.read_unquoted_string()
 
             if not val:
-                self.reader.setCursor(orig_pos)
+                self.reader.set_cursor(orig_pos)
                 self.raise_error("Failed to parse literal or string value")
             else:
                 return self.parse_literal(val)
@@ -1247,7 +1247,7 @@ class MojangsonParser(object):
         if self.debug:
             print("parse_any_tag")
 
-        self.reader.skipWhitespace()
+        self.reader.skip_whitespace()
         if not self.reader.can_read():
             self.raise_error("Failed while parsing value")
         else:
@@ -1263,7 +1263,7 @@ class MojangsonParser(object):
         if self.debug:
             print("parse_array")
 
-        if self.reader.can_read(3) and (not StringReader.isQuotedStringStart(self.reader.peek(1))) and self.reader.peek(2) == ';':
+        if self.reader.can_read(3) and (not StringReader.is_quoted_string_start(self.reader.peek(1))) and self.reader.peek(2) == ';':
             return self.parse_typed_numeric_array()
         else:
             return self.parse_non_numeric_array()
@@ -1273,7 +1273,7 @@ class MojangsonParser(object):
             print("parse_non_numeric_array")
 
         self.advance_and_fail_if_next_is_not('[')
-        self.reader.skipWhitespace()
+        self.reader.skip_whitespace()
         if not self.reader.can_read():
             self.raise_error("Failed to parse non-numeric array")
         else:
@@ -1288,7 +1288,7 @@ class MojangsonParser(object):
                 if not item_type:
                     item_type = new_type
                 elif item_type != new_type:
-                    self.reader.setCursor(orig_pos)
+                    self.reader.set_cursor(orig_pos)
                     self.raise_error(f"Mixed types in list! {item_type!s} != {new_type!s}")
 
                 nbt_list.append(new_value)
@@ -1311,7 +1311,7 @@ class MojangsonParser(object):
 
         # Read ;
         self.reader.read()
-        self.reader.skipWhitespace()
+        self.reader.skip_whitespace()
         if not self.reader.can_read():
             self.raise_error("Unexpected end of numeric array")
         elif first_char == 'B':
@@ -1321,7 +1321,7 @@ class MojangsonParser(object):
         elif first_char == 'I':
             return TagIntArray(PackedArray.from_int_list(self.parse_numeric_array_as_type(TagInt), 32))
         else:
-            self.reader.setCursor(orig_pos)
+            self.reader.set_cursor(orig_pos)
             self.raise_error(f"Unexpected type character {first_char!r} in numeric array")
 
     def parse_numeric_array_as_type(self, item_type):
@@ -1337,7 +1337,7 @@ class MojangsonParser(object):
                 new_type = type(new_value)
 
                 if new_type != item_type:
-                    self.reader.setCursor(orig_pos)
+                    self.reader.set_cursor(orig_pos)
                     self.raise_error(f"Mixed types in list! {item_type!s} != {new_type!s}")
 
                 # Important! Numeric arrays just contain numbers! (i.e. not an array of TagInt)
@@ -1358,14 +1358,14 @@ class MojangsonParser(object):
         self.advance_and_fail_if_next_is_not('{')
         compound = collections.OrderedDict()
 
-        self.reader.skipWhitespace()
+        self.reader.skip_whitespace()
 
         while self.reader.can_read() and self.reader.peek() != '}':
             orig_pos = self.reader.get_cursor()
             key = self.parse_key_string()
 
             if not key:
-                self.reader.setCursor(orig_pos)
+                self.reader.set_cursor(orig_pos)
                 self.raise_error("Failed to parse TagCompound key")
 
             self.advance_and_fail_if_next_is_not(':')
@@ -1387,10 +1387,10 @@ class MojangsonParser(object):
         if self.debug:
             print("seek_to_next_comma_delim_element")
 
-        self.reader.skipWhitespace()
+        self.reader.skip_whitespace()
         if self.reader.can_read() and self.reader.peek() == ',':
             self.reader.skip()
-            self.reader.skipWhitespace()
+            self.reader.skip_whitespace()
             return True
         else:
             return False
@@ -1399,7 +1399,7 @@ class MojangsonParser(object):
         if self.debug:
             print(f"advance_and_fail_if_next_is_not: {char!r}")
 
-        self.reader.skipWhitespace()
+        self.reader.skip_whitespace()
         self.reader.expect(char)
 
     def raise_error(self, msg):
