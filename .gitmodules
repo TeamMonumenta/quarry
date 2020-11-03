@@ -1,0 +1,3 @@
+[submodule "brigadier.py"]
+	path = brigadier.py
+	url = git@github.com:NickNackGus/brigadier.py.git

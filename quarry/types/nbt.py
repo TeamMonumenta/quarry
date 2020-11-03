@@ -1,9 +1,13 @@
 import collections
 import functools
 import gzip
+import os
 import re
+import sys
 import time
 import zlib
+
+sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../brigadier.py"))
 
 from brigadier.string_reader import StringReader
 from quarry.types.buffer import Buffer
@@ -88,18 +92,18 @@ class _Tag(object):
         """Returns path as a StringReader, raising SyntaxError for universally invalid first characters."""
         if not isinstance(path, StringReader):
             path = StringReader(path)
-        if path.canRead() and path.peek() == '.':
-            raise SyntaxError(f"Invalid NBT path element at position {path.getCursor()}: {'...' if path.getCursor() > 10 else ''}{path.getRead()[-10:]}<--[HERE]")
+        if path.can_read() and path.peek() == '.':
+            raise SyntaxError(f"Invalid NBT path element at position {path.get_cursor()}: {'...' if path.get_cursor() > 10 else ''}{path.get_read()[-10:]}<--[HERE]")
         return path
 
     @staticmethod
     def _nbt_path_node_suffix_check(path):
         """Verifies end of path or node separator, and raises SyntaxError on failure."""
-        if path.canRead():
+        if path.can_read():
             if path.peek() == '.':
                 path.skip()
             elif path.peek() != '[':
-                raise SyntaxError(f"Invalid NBT path element at position {path.getCursor()}: {'...' if path.getCursor() > 10 else ''}{path.getRead()[-10:]}<--[HERE]")
+                raise SyntaxError(f"Invalid NBT path element at position {path.get_cursor()}: {'...' if path.get_cursor() > 10 else ''}{path.get_read()[-10:]}<--[HERE]")
 
     def is_subset(self, other):
         return self.value == other.value
@@ -154,12 +158,12 @@ class _DataTag(_Tag):
     def has_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
         self._nbt_path_node_suffix_check(path)
-        return not path.canRead()
+        return not path.can_read()
 
     def at_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
         self._nbt_path_node_suffix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return self
         else:
             raise KeyError(f'{type(self)!s} cannot contain other tags, and is the end of path {path!r}')
@@ -167,7 +171,7 @@ class _DataTag(_Tag):
     def count_multipath(self, path):
         path = self._nbt_path_node_prefix_check(path)
         self._nbt_path_node_suffix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return 1
         else:
             return 0
@@ -175,7 +179,7 @@ class _DataTag(_Tag):
     def iter_multipath_pair(self, path):
         path = self._nbt_path_node_prefix_check(path)
         self._nbt_path_node_suffix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             yield ('', self)
 
 
@@ -268,19 +272,19 @@ class _ArrayTag(_Tag):
 
     def has_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return True
         if path.peek() != '[':
             return False
         path.skip()
 
         # Index case - list[#]
-        index = path.readInt()
-        if not path.canRead() or path.peek() != ']':
+        index = path.read_int()
+        if not path.can_read() or path.peek() != ']':
             return False
         path.skip()
         self._nbt_path_node_suffix_check(path)
-        if path.canRead():
+        if path.can_read():
             raise KeyError(f'{type(self)!s} cannot contain other tags, and is the end of path {path!r}')
         if -len(self.value) > index or index >= len(self.value):
             return False
@@ -288,19 +292,19 @@ class _ArrayTag(_Tag):
 
     def at_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return self
         if path.peek() != '[':
             raise SyntaxError("Cannot index numeric array without [].")
         path.skip()
 
         # Index case - list[#]
-        index = path.readInt()
-        if not path.canRead() or path.peek() != ']':
+        index = path.read_int()
+        if not path.can_read() or path.peek() != ']':
             raise SyntaxError("Unterminated NBT path: Missing ']'")
         path.skip()
         self._nbt_path_node_suffix_check(path)
-        if path.canRead():
+        if path.can_read():
             raise KeyError(f'{type(self)!s} cannot contain other tags, and is the end of path {path!r}')
         if -len(self.value) > index or index >= len(self.value):
             raise IndexError(f'Index {index!s} not in range ({len(self.value)!s} entries)')
@@ -308,13 +312,13 @@ class _ArrayTag(_Tag):
 
     def count_multipath(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return 1
         if path.peek() != '[':
             # Wrong type here, but could be the right type for a sibling tag
             return 0
         path.skip()
-        if not path.canRead():
+        if not path.can_read():
             raise SyntaxError("Unterminated NBT path: Missing ']'")
 
         count = 0
@@ -322,7 +326,7 @@ class _ArrayTag(_Tag):
             # All children case - list[]
             path.skip()
             self._nbt_path_node_suffix_check(path)
-            if path.canRead():
+            if path.can_read():
                 # Last node here, but a sibling tag could have children
                 return 0
             for child in self.value:
@@ -330,12 +334,12 @@ class _ArrayTag(_Tag):
             return count
 
         # Index case - list[#]
-        index = path.readInt()
-        if not path.canRead() or path.peek() != ']':
+        index = path.read_int()
+        if not path.can_read() or path.peek() != ']':
             raise SyntaxError("Unterminated NBT path: Missing ']'")
         path.skip()
         self._nbt_path_node_suffix_check(path)
-        if path.canRead():
+        if path.can_read():
             # Last node here, but a sibling tag could have children
             return 0
         if -len(self.value) > index or index >= len(self.value):
@@ -344,14 +348,14 @@ class _ArrayTag(_Tag):
 
     def iter_multipath_pair(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             yield ('', self)
             return
         if path.peek() != '[':
             # Wrong type here, but could be the right type for a sibling tag
             return
         path.skip()
-        if not path.canRead():
+        if not path.can_read():
             raise SyntaxError("Unterminated NBT path: Missing ']'")
 
         count = 0
@@ -359,19 +363,19 @@ class _ArrayTag(_Tag):
             # All children case - list[]
             path.skip()
             self._nbt_path_node_suffix_check(path)
-            if path.canRead():
+            if path.can_read():
                 raise KeyError(f'{type(self)!s} cannot contain other tags, and is the end of path {path!r}')
             for index, child in enumerate(self.value):
                 yield (f'[{index}]', child)
             return
 
         # Index case - list[#]
-        index = path.readInt()
-        if not path.canRead() or path.peek() != ']':
+        index = path.read_int()
+        if not path.can_read() or path.peek() != ']':
             raise SyntaxError("Unterminated NBT path: Missing ']'")
         path.skip()
         self._nbt_path_node_suffix_check(path)
-        if path.canRead():
+        if path.can_read():
             raise KeyError(f'{type(self)!s} cannot contain other tags, and is the end of path {path!r}')
         if -len(self.value) > index or index >= len(self.value):
             return
@@ -468,12 +472,12 @@ class TagString(_Tag):
     def has_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
         self._nbt_path_node_suffix_check(path)
-        return not path.canRead()
+        return not path.can_read()
 
     def at_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
         self._nbt_path_node_suffix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return self
         else:
             raise KeyError(f'{type(self)!s} cannot contain other tags, and is the end of path {path!r}')
@@ -481,7 +485,7 @@ class TagString(_Tag):
     def count_multipath(self, path):
         path = self._nbt_path_node_prefix_check(path)
         self._nbt_path_node_suffix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return 1
         else:
             return 0
@@ -489,7 +493,7 @@ class TagString(_Tag):
     def iter_multipath_pair(self, path):
         path = self._nbt_path_node_prefix_check(path)
         self._nbt_path_node_suffix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             yield ('', self)
 
     def to_mojangson(self, sort=None, highlight=False):
@@ -626,13 +630,13 @@ class TagList(_Tag):
 
     def has_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return True
         if path.peek() != '[':
             # Wrong type here, but could be the right type for a sibling tag
             return False
         path.skip()
-        if not path.canRead():
+        if not path.can_read():
             raise SyntaxError("Unterminated NBT path: Missing ']'")
 
         count = 0
@@ -640,16 +644,16 @@ class TagList(_Tag):
             # All children case - list[]
             path.skip()
             self._nbt_path_node_suffix_check(path)
-            cursor = path.getCursor()
+            cursor = path.get_cursor()
             for child in self.value:
-                path.setCursor(cursor)
+                path.set_cursor(cursor)
                 if child.has_path(path):
                     return True
             return False
 
         # Index case - list[#]
-        index = path.readInt()
-        if not path.canRead() or path.peek() != ']':
+        index = path.read_int()
+        if not path.can_read() or path.peek() != ']':
             raise SyntaxError("Unterminated NBT path: Missing ']'")
         path.skip()
         self._nbt_path_node_suffix_check(path)
@@ -659,18 +663,18 @@ class TagList(_Tag):
 
     def at_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return self
         if path.peek() != '[':
             # Wrong type here, but could be the right type for a sibling tag
             raise SyntaxError(f"Unexpected character in NBT path of TagList: {path.peek()!r}")
         path.skip()
-        if not path.canRead():
+        if not path.can_read():
             raise SyntaxError("Unterminated NBT path: Missing ']'")
 
         # Index case - list[#]
-        index = path.readInt()
-        if not path.canRead() or path.peek() != ']':
+        index = path.read_int()
+        if not path.can_read() or path.peek() != ']':
             raise SyntaxError("Unterminated NBT path: Missing ']'")
         path.skip()
         self._nbt_path_node_suffix_check(path)
@@ -680,13 +684,13 @@ class TagList(_Tag):
 
     def count_multipath(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return 1
         if path.peek() != '[':
             # Wrong type here, but could be the right type for a sibling tag
             return 0
         path.skip()
-        if not path.canRead():
+        if not path.can_read():
             raise SyntaxError("Unterminated NBT path: Missing ']'")
 
         count = 0
@@ -694,29 +698,29 @@ class TagList(_Tag):
             # All children case - list[]
             path.skip()
             self._nbt_path_node_suffix_check(path)
-            cursor = path.getCursor()
+            cursor = path.get_cursor()
             for child in self.value:
-                path.setCursor(cursor)
+                path.set_cursor(cursor)
                 count += child.count_multipath(path)
             return count
 
         if path.peek() == '{':
             # List of matching compounds case - list[{}]
             child_must_match = TagCompound.from_mojangson(path) # advances cursor; raises SyntaxError
-            if not path.canRead() or path.peek() != ']':
+            if not path.can_read() or path.peek() != ']':
                 raise SyntaxError("Unterminated NBT path: Missing ']'")
             self._nbt_path_node_suffix_check(path)
-            cursor = path.getCursor()
+            cursor = path.get_cursor()
             for child in self.value:
-                path.setCursor(cursor)
+                path.set_cursor(cursor)
                 if not child_must_match.is_subset(child):
                     continue
                 count += child.count_multipath(path)
             return count
 
         # Index case - list[#]
-        index = path.readInt()
-        if not path.canRead() or path.peek() != ']':
+        index = path.read_int()
+        if not path.can_read() or path.peek() != ']':
             raise SyntaxError("Unterminated NBT path: Missing ']'")
         path.skip()
         self._nbt_path_node_suffix_check(path)
@@ -726,14 +730,14 @@ class TagList(_Tag):
 
     def iter_multipath_pair(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             yield ('', self)
             return
         if path.peek() != '[':
             # Wrong type here, but could be the right type for a sibling tag
             return
         path.skip()
-        if not path.canRead():
+        if not path.can_read():
             raise SyntaxError("Unterminated NBT path: Missing ']'")
 
         count = 0
@@ -741,9 +745,9 @@ class TagList(_Tag):
             # All children case - list[]
             path.skip()
             self._nbt_path_node_suffix_check(path)
-            cursor = path.getCursor()
+            cursor = path.get_cursor()
             for index, child in enumerate(self.value):
-                path.setCursor(cursor)
+                path.set_cursor(cursor)
                 for subpath, tag in child.iter_multipath_pair(path):
                     yield (nbt_path_join(f'[{index}]', subpath), tag)
             return
@@ -751,12 +755,12 @@ class TagList(_Tag):
         if path.peek() == '{':
             # List of matching compounds case - list[{}]
             child_must_match = TagCompound.from_mojangson(path) # advances cursor; raises SyntaxError
-            if not path.canRead() or path.peek() != ']':
+            if not path.can_read() or path.peek() != ']':
                 raise SyntaxError("Unterminated NBT path: Missing ']'")
             self._nbt_path_node_suffix_check(path)
-            cursor = path.getCursor()
+            cursor = path.get_cursor()
             for index, child in enumerate(self.value):
-                path.setCursor(cursor)
+                path.set_cursor(cursor)
                 if not child_must_match.is_subset(child):
                     continue
                 for subpath, tag in child.iter_multipath_pair(path):
@@ -764,8 +768,8 @@ class TagList(_Tag):
             return
 
         # Index case - list[#]
-        index = path.readInt()
-        if not path.canRead() or path.peek() != ']':
+        index = path.read_int()
+        if not path.can_read() or path.peek() != ']':
             raise SyntaxError("Unterminated NBT path: Missing ']'")
         path.skip()
         self._nbt_path_node_suffix_check(path)
@@ -932,7 +936,7 @@ class TagCompound(_Tag):
 
     def has_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return True
 
         target = self
@@ -948,25 +952,25 @@ class TagCompound(_Tag):
             if path.peek() == '"':
                 # Quoted tag name (allows unusual characters; can't quote with ')
                 path.skip()
-                child_tag_name = path.readStringUntil('"')
+                child_tag_name = path.read_string_until('"')
             else:
                 # Assume unquoted tag name (different rules than normal unquoted string!)
-                start = path.getCursor()
-                while path.canRead() and path.peek() not in ' .[]{}"':
+                start = path.get_cursor()
+                while path.can_read() and path.peek() not in ' .[]{}"':
                     path.skip()
-                if path.canRead() and path.peek() not in '.{[':
-                    raise SyntaxError(f'Unexpected character {path.peek()!r} at char {path.getCursor()} - expected [, {{, or .')
-                end = path.getCursor()
+                if path.can_read() and path.peek() not in '.{[':
+                    raise SyntaxError(f'Unexpected character {path.peek()!r} at char {path.get_cursor()} - expected [, {{, or .')
+                end = path.get_cursor()
                 if start == end:
                     raise SyntaxError(f"Invalid unquoted tag name; can't start with {path.peek()}")
-                child_tag_name = path.getString()[start:end]
+                child_tag_name = path.get_string()[start:end]
 
             if child_tag_name not in self.value:
                 return False
             target = self.value[child_tag_name]
 
             # Check if this is the end of the path node
-            if not path.canRead():
+            if not path.can_read():
                 return True
             if path.peek() in '.[':
                 target._nbt_path_node_suffix_check(path)
@@ -984,7 +988,7 @@ class TagCompound(_Tag):
 
     def at_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return self
 
         target = self
@@ -1000,25 +1004,25 @@ class TagCompound(_Tag):
             if path.peek() == '"':
                 # Quoted tag name (allows unusual characters; can't quote with ')
                 path.skip()
-                child_tag_name = path.readStringUntil('"')
+                child_tag_name = path.read_string_until('"')
             else:
                 # Assume unquoted tag name (different rules than normal unquoted string!)
-                start = path.getCursor()
-                while path.canRead() and path.peek() not in ' .[]{}"':
+                start = path.get_cursor()
+                while path.can_read() and path.peek() not in ' .[]{}"':
                     path.skip()
-                if path.canRead() and path.peek() not in '.[{':
-                    raise SyntaxError(f'Unexpected character {path.peek()!r} at char {path.getCursor()} - expected [, {{, or .')
-                end = path.getCursor()
+                if path.can_read() and path.peek() not in '.[{':
+                    raise SyntaxError(f'Unexpected character {path.peek()!r} at char {path.get_cursor()} - expected [, {{, or .')
+                end = path.get_cursor()
                 if start == end:
                     raise SyntaxError(f"Invalid unquoted tag name; can't start with {path.peek()}")
-                child_tag_name = path.getString()[start:end]
+                child_tag_name = path.get_string()[start:end]
 
             if child_tag_name not in self.value:
                 raise KeyError(f"{child_tag_name!r} not in {self.value.keys()!r}")
             target = self.value[child_tag_name]
 
             # Check if this is the end of the path node
-            if not path.canRead():
+            if not path.can_read():
                 return target
             if path.peek() in '.[':
                 target._nbt_path_node_suffix_check(path)
@@ -1036,7 +1040,7 @@ class TagCompound(_Tag):
 
     def count_multipath(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             return 1
 
         target = self
@@ -1052,25 +1056,25 @@ class TagCompound(_Tag):
             if path.peek() == '"':
                 # Quoted tag name (allows unusual characters; can't quote with ')
                 path.skip()
-                child_tag_name = path.readStringUntil('"')
+                child_tag_name = path.read_string_until('"')
             else:
                 # Assume unquoted tag name (different rules than normal unquoted string!)
-                start = path.getCursor()
-                while path.canRead() and path.peek() not in ' .[]{}"':
+                start = path.get_cursor()
+                while path.can_read() and path.peek() not in ' .[]{}"':
                     path.skip()
-                if path.canRead() and path.peek() not in '.[{':
-                    raise SyntaxError(f'Unexpected character {path.peek()!r} at char {path.getCursor()} - expected [, {{, or .')
-                end = path.getCursor()
+                if path.can_read() and path.peek() not in '.[{':
+                    raise SyntaxError(f'Unexpected character {path.peek()!r} at char {path.get_cursor()} - expected [, {{, or .')
+                end = path.get_cursor()
                 if start == end:
                     raise SyntaxError(f"Invalid unquoted tag name; can't start with {path.peek()}")
-                child_tag_name = path.getString()[start:end]
+                child_tag_name = path.get_string()[start:end]
 
             if child_tag_name not in self.value:
                 return 0
             target = self.value[child_tag_name]
 
             # Check if this is the end of the path node
-            if not path.canRead():
+            if not path.can_read():
                 return 1
             if path.peek() in '.[':
                 target._nbt_path_node_suffix_check(path)
@@ -1088,7 +1092,7 @@ class TagCompound(_Tag):
 
     def iter_multipath_pair(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        if not path.canRead():
+        if not path.can_read():
             yield ('', self)
             return
 
@@ -1105,22 +1109,22 @@ class TagCompound(_Tag):
 
             if path.peek() == '"':
                 # Quoted tag name (allows unusual characters; can't quote with ')
-                start = path.getCursor()
+                start = path.get_cursor()
                 path.skip()
-                child_tag_name = path.readStringUntil('"')
-                end = path.getCursor()
-                child_tag_name_raw = path.getString()[start:end]
+                child_tag_name = path.read_string_until('"')
+                end = path.get_cursor()
+                child_tag_name_raw = path.get_string()[start:end]
             else:
                 # Assume unquoted tag name (different rules than normal unquoted string!)
-                start = path.getCursor()
-                while path.canRead() and path.peek() not in ' .[]{}"':
+                start = path.get_cursor()
+                while path.can_read() and path.peek() not in ' .[]{}"':
                     path.skip()
-                if path.canRead() and path.peek() not in '.[{':
-                    raise SyntaxError(f'Unexpected character {path.peek()!r} at char {path.getCursor()} - expected [, {{, or .')
-                end = path.getCursor()
+                if path.can_read() and path.peek() not in '.[{':
+                    raise SyntaxError(f'Unexpected character {path.peek()!r} at char {path.get_cursor()} - expected [, {{, or .')
+                end = path.get_cursor()
                 if start == end:
                     raise SyntaxError(f"Invalid unquoted tag name; can't start with {path.peek()}")
-                child_tag_name = path.getString()[start:end]
+                child_tag_name = path.get_string()[start:end]
                 child_tag_name_raw = child_tag_name
 
             if child_tag_name not in self.value:
@@ -1128,7 +1132,7 @@ class TagCompound(_Tag):
             target = self.value[child_tag_name]
 
             # Check if this is the end of the path node
-            if not path.canRead():
+            if not path.can_read():
                 yield (child_tag_name_raw, target)
                 return
             if path.peek() in '.[':
@@ -1183,7 +1187,7 @@ class MojangsonParser(object):
             print("parse_key_string")
 
         self.reader.skipWhitespace()
-        if not self.reader.canRead():
+        if not self.reader.can_read():
             self.raise_error("Failed to parse TagCompound key")
         else:
             return self.reader.readString()
@@ -1226,7 +1230,7 @@ class MojangsonParser(object):
             print("parse_literal_or_string")
 
         self.reader.skipWhitespace()
-        orig_pos = self.reader.getCursor()
+        orig_pos = self.reader.get_cursor()
 
         if StringReader.isQuotedStringStart(self.reader.peek()):
             return TagString(self.reader.readQuotedString())
@@ -1244,7 +1248,7 @@ class MojangsonParser(object):
             print("parse_any_tag")
 
         self.reader.skipWhitespace()
-        if not self.reader.canRead():
+        if not self.reader.can_read():
             self.raise_error("Failed while parsing value")
         else:
             nextChar = self.reader.peek()
@@ -1259,7 +1263,7 @@ class MojangsonParser(object):
         if self.debug:
             print("parse_array")
 
-        if self.reader.canRead(3) and (not StringReader.isQuotedStringStart(self.reader.peek(1))) and self.reader.peek(2) == ';':
+        if self.reader.can_read(3) and (not StringReader.isQuotedStringStart(self.reader.peek(1))) and self.reader.peek(2) == ';':
             return self.parse_typed_numeric_array()
         else:
             return self.parse_non_numeric_array()
@@ -1270,14 +1274,14 @@ class MojangsonParser(object):
 
         self.advance_and_fail_if_next_is_not('[')
         self.reader.skipWhitespace()
-        if not self.reader.canRead():
+        if not self.reader.can_read():
             self.raise_error("Failed to parse non-numeric array")
         else:
             nbt_list = []
             item_type = None
 
             while self.reader.peek() != ']':
-                orig_pos = self.reader.getCursor()
+                orig_pos = self.reader.get_cursor()
                 new_value = self.parse_any_tag()
                 new_type = type(new_value)
 
@@ -1291,7 +1295,7 @@ class MojangsonParser(object):
                 if not self.seek_to_next_comma_delim_element():
                     break
 
-                if not self.reader.canRead():
+                if not self.reader.can_read():
                     self.raise_error("Unexpected end of array")
 
             self.advance_and_fail_if_next_is_not(']')
@@ -1302,13 +1306,13 @@ class MojangsonParser(object):
             print("parse_typed_numeric_array")
 
         self.advance_and_fail_if_next_is_not('[')
-        orig_pos = self.reader.getCursor()
+        orig_pos = self.reader.get_cursor()
         first_char = self.reader.read()
 
         # Read ;
         self.reader.read()
         self.reader.skipWhitespace()
-        if not self.reader.canRead():
+        if not self.reader.can_read():
             self.raise_error("Unexpected end of numeric array")
         elif first_char == 'B':
             return TagByteArray(PackedArray.from_int_list(self.parse_numeric_array_as_type(TagByte), 8))
@@ -1328,7 +1332,7 @@ class MojangsonParser(object):
 
         while True:
             if self.reader.peek() != ']':
-                orig_pos = self.reader.getCursor()
+                orig_pos = self.reader.get_cursor()
                 new_value = self.parse_any_tag()
                 new_type = type(new_value)
 
@@ -1340,7 +1344,7 @@ class MojangsonParser(object):
                 array.append(new_value.value)
 
                 if self.seek_to_next_comma_delim_element():
-                    if not self.reader.canRead():
+                    if not self.reader.can_read():
                         self.raise_error("Unexpected end of numeric array elements")
                     continue
 
@@ -1356,8 +1360,8 @@ class MojangsonParser(object):
 
         self.reader.skipWhitespace()
 
-        while self.reader.canRead() and self.reader.peek() != '}':
-            orig_pos = self.reader.getCursor()
+        while self.reader.can_read() and self.reader.peek() != '}':
+            orig_pos = self.reader.get_cursor()
             key = self.parse_key_string()
 
             if not key:
@@ -1373,7 +1377,7 @@ class MojangsonParser(object):
             if not self.seek_to_next_comma_delim_element():
                 break
 
-            if not self.reader.canRead():
+            if not self.reader.can_read():
                 self.raise_error("Failed to parse TagCompound element")
 
         self.advance_and_fail_if_next_is_not('}')
@@ -1384,7 +1388,7 @@ class MojangsonParser(object):
             print("seek_to_next_comma_delim_element")
 
         self.reader.skipWhitespace()
-        if self.reader.canRead() and self.reader.peek() == ',':
+        if self.reader.can_read() and self.reader.peek() == ',':
             self.reader.skip()
             self.reader.skipWhitespace()
             return True
