@@ -427,11 +427,11 @@ class TagString(_Tag):
     def use_single_quotes(self):
         single_quote_count = self.value.count("'")
         double_quote_count = self.value.count('"')
-        if single_quote_count == 0:
-            return False
         if single_quote_count == double_quote_count:
+            if single_quote_count == 0:
+                return False
             return self.value.find("'") > self.value.find('"')
-        return single_quote_count > double_quote_count
+        return single_quote_count < double_quote_count
 
     @property
     def prefix(self):
