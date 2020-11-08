@@ -1,9 +1,9 @@
+#!/usr/bin/env python3
+
 import enum
 
 class TextFormatBase(object):
-    """
-    A single color or formating option
-    """
+    """A single color or formating option"""
     def __init__(self, section_code, display_name, technical_name, ansi_code, foreground_color=None, background_color=None):
         self.section_code = section_code
         self.display_name = display_name
@@ -12,13 +12,31 @@ class TextFormatBase(object):
         self.foreground_color = foreground_color
         self.background_color = background_color
 
+        self.term_foreground_true_color = None
+        if self.foreground_color is not None:
+            r, g, b = TextFormatBase.split_rgb(self.foreground_color)
+            self.term_foreground_true_color = f'\x1b[0m\x1b[38;2;{r};{g};{b}m'
+
+        self.term_background_true_color = None
+        if self.background_color is not None:
+            r, g, b = TextFormatBase.split_rgb(self.background_color)
+            self.term_background_true_color = f'\x1b[0m\x1b[48;2;{r};{g};{b}m'
+
+    @staticmethod
+    def split_rgb(color: int):
+        """Return an R, G, B tuple, from 0-255 each."""
+        r = (color >> 16) & 0xff
+        g = (color >>  8) & 0xff
+        b =  color        & 0xff
+        return (r, g, b)
+
     def __eq__(self, other):
         if type(self) == type(other):
             return self.section_code == other.section_code
 
         if type(other) == int:
             try:
-                if int(self.id,16) == other:
+                if int(self.id, 16) == other:
                     return True
             except:
                 pass
@@ -49,9 +67,7 @@ class TextFormatBase(object):
         return False
 
 class TextColors(enum.Enum):
-    """
-    Minecraft text color codes
-    """
+    """Minecraft text color codes"""
     black         = TextFormatBase("§0", "Black",         "black",         "\x1b[0m\x1b[30m",   0x000000, 0x000000)
     dark_blue     = TextFormatBase("§1", "Dark Blue",     "dark_blue",     "\x1b[0m\x1b[34m",   0x0000AA, 0x00002A)
     dark_green    = TextFormatBase("§2", "Dark Green",    "dark_green",    "\x1b[0m\x1b[32m",   0x00AA00, 0x002A00)
@@ -69,16 +85,32 @@ class TextColors(enum.Enum):
     yellow        = TextFormatBase("§e", "Yellow",        "yellow",        "\x1b[0m\x1b[33;1m", 0xFFFF55, 0x3F3F15)
     white         = TextFormatBase("§f", "White",         "white",         "\x1b[0m\x1b[37;1m", 0xFFFFFF, 0x3F3F3F)
 
+    @staticmethod
+    def get_format_by_technical_name(match):
+        """Return one piece of color information by an ID or name"""
+        for format in TextFormats:
+            if format.value.technical_name == match:
+                return format.value
+        else:
+            raise KeyError("No such format code: {}".format(match))
+
 class TextStyles(enum.Enum):
-    """
-    Minecraft text color codes
-    """
+    """Minecraft text color codes"""
     obfuscated    = TextFormatBase("§k", "Obfuscated",    "obfuscated",    "\x1b[7m", )
     bold          = TextFormatBase("§l", "Bold",          "bold",          "\x1b[1m", )
     strikethrough = TextFormatBase("§m", "Strikethrough", "strikethrough", "\x1b[9m", )
     underlined    = TextFormatBase("§n", "Underline",     "underlined",    "\x1b[4m", )
     italic        = TextFormatBase("§o", "Italic",        "italic",        "\x1b[3m", )
     reset         = TextFormatBase("§r", "Reset",         "reset",         "\x1b[0m", )
+
+    @staticmethod
+    def get_format_by_technical_name(match):
+        """Return one piece of color information by an ID or name"""
+        for format in TextFormats:
+            if format.value.technical_name == match:
+                return format.value
+        else:
+            raise KeyError("No such format code: {}".format(match))
 
 class TextFormats(enum.Enum):
     black = TextColors.black.value
@@ -105,20 +137,43 @@ class TextFormats(enum.Enum):
     italic = TextStyles.italic.value
     reset = TextStyles.reset.value
 
+    @staticmethod
+    def get_format(match):
+        """Return one piece of color information by an ID or name"""
+        for format in TextFormats:
+            if format.value == match:
+                return format.value
+        else:
+            raise KeyError("No such format code: {}".format(match))
+
+    @staticmethod
+    def get_format_by_section_code(match):
+        """Return one piece of color information by an ID or name"""
+        for format in TextFormats:
+            if format.value.section_code == match:
+                return format.value
+        else:
+            raise KeyError("No such format code: {}".format(match))
+
+    @staticmethod
+    def get_format_by_technical_name(match):
+        """Return one piece of color information by an ID or name"""
+        for format in TextFormats:
+            if format.value.technical_name == match:
+                return format.value
+        else:
+            raise KeyError("No such format code: {}".format(match))
+
 def get_format(match):
-    """
-    Return one piece of color information by an ID or name
-    """
+    """Return one piece of color information by an ID or name"""
     for format in TextFormats:
         if format.value == match:
             return format.value
     else:
         raise KeyError("No such format code: {}".format(match))
 
-def ansify_text(text,show_section=True):
-    """
-    Return the provided text with §-style format codes converted to ansi format codes (compatible with most terminals)
-    """
+def ansify_text(text, show_section=True):
+    """Return the provided text with §-style format codes converted to ansi format codes (compatible with most terminals)"""
     result = text
     for format in TextFormats:
         if show_section:
@@ -134,9 +189,7 @@ def ansify_text(text,show_section=True):
     return result + TextStyles.reset.value.ansi_code
 
 def unformat_text(text):
-    """
-    Return the provided text without §-style format codes
-    """
+    """Return the provided text without §-style format codes"""
     result = text
     for format in TextFormats:
         result = result.replace(format.value.section_code, '')
