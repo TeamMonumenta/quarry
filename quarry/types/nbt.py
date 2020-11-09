@@ -186,7 +186,7 @@ class _DataTag(_Tag):
 class _ArrayTag(_Tag):
     __slots__ = ()
     width = None
-    separator = (', ', f'{get_format("white").ansi_code}, ')
+    separator = (',', f'{get_format("white").ansi_code}, ')
 
     def __len__(self):
         return len(self.value)
@@ -527,27 +527,27 @@ class TagString(_Tag):
 class TagByteArray(_ArrayTag):
     __slots__ = ()
     width = 8
-    prefix = ('[B; ', f'{get_format("white").ansi_code}[{get_format("red").ansi_code}B{get_format("white").ansi_code}; {get_format("gold").ansi_code}')
+    prefix = ('[B;', f'{get_format("white").ansi_code}[{get_format("red").ansi_code}B{get_format("white").ansi_code}; {get_format("gold").ansi_code}')
     postfix = (']', f'{get_format("white").ansi_code}]{get_format("reset").ansi_code}')
-    separator = (', ', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
+    separator = (',', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
     type_postfix = ('b', f'{get_format("red").ansi_code}b')
 
 
 class TagIntArray(_ArrayTag):
     __slots__ = ()
     width = 32
-    prefix = ('[I; ', f'{get_format("white").ansi_code}[{get_format("red").ansi_code}I{get_format("white").ansi_code}; {get_format("gold").ansi_code}')
+    prefix = ('[I;', f'{get_format("white").ansi_code}[{get_format("red").ansi_code}I{get_format("white").ansi_code}; {get_format("gold").ansi_code}')
     postfix = (']', f'{get_format("white").ansi_code}]{get_format("reset").ansi_code}')
-    separator = (', ', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
+    separator = (',', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
     type_postfix = ('', '')
 
 
 class TagLongArray(_ArrayTag):
     __slots__ = ()
     width = 64
-    prefix = ('[L; ', f'{get_format("white").ansi_code}[{get_format("red").ansi_code}L{get_format("white").ansi_code}; {get_format("gold").ansi_code}')
+    prefix = ('[L;', f'{get_format("white").ansi_code}[{get_format("red").ansi_code}L{get_format("white").ansi_code}; {get_format("gold").ansi_code}')
     postfix = (']', f'{get_format("white").ansi_code}]{get_format("reset").ansi_code}')
-    separator = (', ', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
+    separator = (',', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
     type_postfix = ('l', f'{get_format("red").ansi_code}l')
 
 
@@ -555,7 +555,7 @@ class TagList(_Tag):
     __slots__ = ()
     prefix = ('[', f'{get_format("white").ansi_code}[{get_format("gold").ansi_code}')
     postfix = (']', f'{get_format("white").ansi_code}]{get_format("reset").ansi_code}')
-    separator = (', ', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
+    separator = (',', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
 
     def __len__(self):
         return len(self.value)
@@ -793,8 +793,8 @@ class TagCompound(_Tag):
     preserve_order = True
     prefix = ('{', f'{get_format("white").ansi_code}{{{get_format("gold").ansi_code}')
     postfix = ('}', f'{get_format("white").ansi_code}}}{get_format("reset").ansi_code}')
-    separator = (', ', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
-    key_value_separator = (': ', f'{get_format("white").ansi_code}: ')
+    separator = (',', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
+    key_value_separator = (':', f'{get_format("white").ansi_code}: ')
 
     @classmethod
     def from_buff(cls, buff):
