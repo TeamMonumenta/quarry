@@ -68,6 +68,7 @@ class TextFormatBase(object):
 
 class TextColors(enum.Enum):
     """Minecraft text color codes"""
+    reset         = TextFormatBase("§r", "Reset",         "reset",         "\x1b[0m", )
     black         = TextFormatBase("§0", "Black",         "black",         "\x1b[0m\x1b[30m",   0x000000, 0x000000)
     dark_blue     = TextFormatBase("§1", "Dark Blue",     "dark_blue",     "\x1b[0m\x1b[34m",   0x0000AA, 0x00002A)
     dark_green    = TextFormatBase("§2", "Dark Green",    "dark_green",    "\x1b[0m\x1b[32m",   0x00AA00, 0x002A00)
@@ -101,7 +102,6 @@ class TextStyles(enum.Enum):
     strikethrough = TextFormatBase("§m", "Strikethrough", "strikethrough", "\x1b[9m", )
     underlined    = TextFormatBase("§n", "Underline",     "underlined",    "\x1b[4m", )
     italic        = TextFormatBase("§o", "Italic",        "italic",        "\x1b[3m", )
-    reset         = TextFormatBase("§r", "Reset",         "reset",         "\x1b[0m", )
 
     @staticmethod
     def get_format_by_technical_name(match):
@@ -113,6 +113,7 @@ class TextStyles(enum.Enum):
             raise KeyError("No such format code: {}".format(match))
 
 class TextFormats(enum.Enum):
+    reset = TextColors.reset.value
     black = TextColors.black.value
     dark_blue = TextColors.dark_blue.value
     dark_green = TextColors.dark_green.value
@@ -135,7 +136,6 @@ class TextFormats(enum.Enum):
     strikethrough = TextStyles.strikethrough.value
     underlined = TextStyles.underlined.value
     italic = TextStyles.italic.value
-    reset = TextStyles.reset.value
 
     @staticmethod
     def get_format(match):
@@ -186,7 +186,7 @@ def ansify_text(text, show_section=True):
                 format.value.section_code,
                 format.value.ansi_code
             )
-    return result + TextStyles.reset.value.ansi_code
+    return result + TextColors.reset.value.ansi_code
 
 def unformat_text(text):
     """Return the provided text without §-style format codes"""
