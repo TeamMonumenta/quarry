@@ -128,7 +128,7 @@ class PackedArray(Sequence):
             storage.append(BitArray(int=item, length=value_width))
             offset += value_width
 
-        return cls(storage, value_width, value_width, False)
+        return cls(storage, len(lst), value_width, value_width)
 
     @classmethod
     def from_light_bytes(cls, bytes):
