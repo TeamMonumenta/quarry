@@ -478,7 +478,6 @@ class TagString(_Tag):
 
     def has_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        self._nbt_path_node_suffix_check(path)
         return not path.can_read()
 
     def at_path(self, path):
