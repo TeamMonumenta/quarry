@@ -1472,8 +1472,8 @@ class RegionFile(object):
     """
     Experimental support for the Minecraft world storage format (``.mca``).
     """
-    def __init__(self, path):
-        self.fd = open(path, "r+b")
+    def __init__(self, path, read_only=False):
+        self.fd = open(path, "rb" if read_only else "r+b")
 
     def __enter__(self):
         return self
