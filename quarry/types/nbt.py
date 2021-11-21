@@ -10,6 +10,9 @@ import zlib
 sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../../brigadier.py"))
 
 from brigadier.string_reader import StringReader
+
+from mutf8 import encode_modified_utf8, decode_modified_utf8
+
 from quarry.types.buffer import Buffer
 from quarry.types.text_format import ansify_text, get_format, unformat_text
 from quarry.types.chunk import PackedArray
@@ -453,10 +456,10 @@ class TagString(_Tag):
     @classmethod
     def from_buff(cls, buff):
         string_length = buff.unpack('H')
-        return cls(buff.read(string_length).decode('utf8'))
+        return cls(decode_modified_utf8(buff.read(string_length)))
 
     def to_bytes(self):
-        data = self.value.encode('utf8')
+        data = encode_modified_utf8(self.value)
         return Buffer.pack('H', len(data)) + data
 
     def diff(self, other, order_matters=True, show_values=False, path=''):
