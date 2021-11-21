@@ -16,7 +16,7 @@ setup(
         'cryptography >= 0.9',
         'pyOpenSSL >= 0.15.1',
         'service_identity >= 14.0.0',
-        'mutf8 >= 1.0.5',
+        'py2jdbc >= 0.0.6',
     ],
     test_requires=[
         'pytest'
