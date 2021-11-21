@@ -1,11 +1,16 @@
+import codecs
 import collections
 import functools
 import gzip
 import time
 import zlib
 
+from py2jdbc import mutf8
+
 from quarry.types.buffer import Buffer
 from quarry.types.chunk import PackedArray
+
+codecs.register(mutf8.info)
 
 _kinds = {}
 _ids = {}
@@ -113,10 +118,10 @@ class TagString(_Tag):
     @classmethod
     def from_buff(cls, buff):
         string_length = buff.unpack('H')
-        return cls(buff.read(string_length).decode('utf8'))
+        return cls(buff.read(string_length).decode('mutf8'))
 
     def to_bytes(self):
-        data = self.value.encode('utf8')
+        data = self.value.encode('mutf8')
         return Buffer.pack('H', len(data)) + data
 
 
