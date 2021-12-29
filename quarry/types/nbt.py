@@ -11,8 +11,7 @@ sys.path.append(os.path.join(os.path.dirname(os.path.realpath(__file__)), "../..
 
 from brigadier.string_reader import StringReader
 
-from mutf8.cmutf8 import decode_modified_utf8
-from mutf8.mutf8 import encode_modified_utf8
+from mutf8.mutf8 import encode_modified_utf8, decode_modified_utf8
 
 from quarry.types.buffer import Buffer
 from quarry.types.text_format import ansify_text, get_format, unformat_text
