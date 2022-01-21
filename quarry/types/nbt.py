@@ -916,7 +916,11 @@ class TagCompound(_Tag):
         inner_mojangson = []
         for key in keys:
             content = self.value[key]
-            inner_mojangson.append(f'{key}{key_value_separator}{content.to_mojangson(sort, highlight)}')
+            if " " in key:
+                key_str = f'"{key}"'
+            else:
+                key_str = key
+            inner_mojangson.append(f'{key_str}{key_value_separator}{content.to_mojangson(sort, highlight)}')
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
 
     def tree(self, sort=None, indent='    ', level=0):
