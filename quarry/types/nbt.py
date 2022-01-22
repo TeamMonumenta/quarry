@@ -448,23 +448,24 @@ class TagDouble(_DataTag):
 class TagString(_Tag):
     __slots__ = ()
 
-    def use_single_quotes(self):
-        single_quote_count = self.value.count("'")
-        double_quote_count = self.value.count('"')
+    @staticmethod
+    def use_single_quotes(text):
+        single_quote_count = text.count("'")
+        double_quote_count = text.count('"')
         if single_quote_count == double_quote_count:
             if single_quote_count == 0:
                 return False
-            return self.value.find("'") > self.value.find('"')
+            return text.find("'") > text.find('"')
         return single_quote_count < double_quote_count
 
     @property
     def prefix(self):
-        q = "'" if self.use_single_quotes() else '"'
+        q = "'" if self.use_single_quotes(self.value) else '"'
         return (q, f'{get_format("white").ansi_code}{q}{get_format("green").ansi_code}')
 
     @property
     def postfix(self):
-        q = "'" if self.use_single_quotes() else '"'
+        q = "'" if self.use_single_quotes(self.value) else '"'
         return (q, f'{get_format("white").ansi_code}{q}{get_format("reset").ansi_code}')
 
     @classmethod
@@ -519,15 +520,20 @@ class TagString(_Tag):
         if not path.can_read():
             yield ('', self)
 
+    @staticmethod
+    def escape_value(text):
+        text = text.replace('\\', '\\\\').replace('\n', '\\n"')
+        if self.use_single_quotes(text):
+            text = text.replace("'", "\\'")
+        else:
+            text = text.replace('"', '\\"')
+        return text
+
     def to_mojangson(self, sort=None, highlight=False):
         prefix = self.prefix[highlight]
         postfix = self.postfix[highlight]
 
-        text = self.value.replace('\\', '\\\\').replace('\n', '\\n"')
-        if self.use_single_quotes():
-            text = text.replace("'", "\\'")
-        else:
-            text = text.replace('"', '\\"')
+        text = self.escape_value(self.value)
         if highlight:
             text = ansify_text(text, show_section=True)
         return f'{prefix}{text}{postfix}'
@@ -814,6 +820,7 @@ class TagCompound(_Tag):
     postfix = ('}', f'{get_format("white").ansi_code}}}{get_format("reset").ansi_code}')
     separator = (',', f'{get_format("white").ansi_code}, {get_format("gold").ansi_code}')
     key_value_separator = (':', f'{get_format("white").ansi_code}: ')
+    regexUnquotedString = re.compile(r'''[A-Za-z0-9._+-]+''')
 
     @classmethod
     def from_buff(cls, buff):
@@ -933,10 +940,10 @@ class TagCompound(_Tag):
         inner_mojangson = []
         for key in keys:
             content = self.value[key]
-            if " " in key:
-                key_str = f'"{key}"'
-            else:
+            if regexUnquotedString.fullmatch(key):
                 key_str = key
+            else:
+                key_str = TagString.escape_value(key)
             inner_mojangson.append(f'{key_str}{key_value_separator}{content.to_mojangson(sort, highlight)}')
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
 
