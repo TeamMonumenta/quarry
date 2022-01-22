@@ -447,16 +447,12 @@ class TagDouble(_DataTag):
 
 class TagString(_Tag):
     __slots__ = ()
+    regexQuote = re.compile(r'''['"]''')
 
     @staticmethod
     def use_single_quotes(text):
-        single_quote_count = text.count("'")
-        double_quote_count = text.count('"')
-        if single_quote_count == double_quote_count:
-            if single_quote_count == 0:
-                return False
-            return text.find("'") > text.find('"')
-        return single_quote_count < double_quote_count
+        first_quote = TagString.regexQuote.search(text)
+        return first_quote is not None and first_quote[0] == '"'
 
     @property
     def prefix(self):
@@ -523,11 +519,16 @@ class TagString(_Tag):
     @staticmethod
     def escape_value(text):
         text = text.replace('\\', '\\\\').replace('\n', '\\n"')
-        if self.use_single_quotes(text):
+        if TagString.use_single_quotes(text):
             text = text.replace("'", "\\'")
         else:
             text = text.replace('"', '\\"')
         return text
+
+    @staticmethod
+    def quote_value(text):
+        q = "'" if TagString.use_single_quotes(text) else '"'
+        return q + TagString.escape_value(text) + q
 
     def to_mojangson(self, sort=None, highlight=False):
         prefix = self.prefix[highlight]
@@ -940,10 +941,10 @@ class TagCompound(_Tag):
         inner_mojangson = []
         for key in keys:
             content = self.value[key]
-            if regexUnquotedString.fullmatch(key):
+            if self.regexUnquotedString.fullmatch(key):
                 key_str = key
             else:
-                key_str = TagString.escape_value(key)
+                key_str = TagString.quote_value(key)
             inner_mojangson.append(f'{key_str}{key_value_separator}{content.to_mojangson(sort, highlight)}')
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
 
@@ -973,7 +974,11 @@ class TagCompound(_Tag):
         inner_mojangson = []
         for key in keys:
             content = self.value[key]
-            inner_mojangson.append(f'{indent*(level+1)}{key}{key_value_separator}{content.tree(sort, indent, level+1)}')
+            if self.regexUnquotedString.fullmatch(key):
+                key_str = key
+            else:
+                key_str = TagString.quote_value(key)
+            inner_mojangson.append(f'{indent*(level+1)}{key_str}{key_value_separator}{content.tree(sort, indent, level+1)}')
 
         if len(inner_mojangson) == 0:
             result = f'{prefix}{postfix}'
