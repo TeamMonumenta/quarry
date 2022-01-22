@@ -1,4 +1,4 @@
-from collections import Sequence, MutableSequence
+from collections.abc import Sequence, MutableSequence
 from bitstring import BitArray, Bits
 import math
 
