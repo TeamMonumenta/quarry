@@ -1655,6 +1655,44 @@ class RegionFile(object):
             # No chunk at that location
             return None
 
+    def delete_chunk(self, chunk_x, chunk_z):
+        """
+        Deletes the chunk at the given co-ordinates from the region file.
+        The co-ordinates should range from 0 to 31. Returns a ``TagRoot``.
+        If no chunk is found, returns None.
+        """
+
+        # Load extents
+        extents = [(0, 2)] # Ignore the extent and timestamp tables.
+        self.fd.seek(0)
+        buff = Buffer(self._region.fd.read(4096))
+        for entry_index in range(1024):
+            z, x = divmod(entry_index, 32)
+            entry = buff.unpack('I') & 0xffffffff
+            offset, length = entry >> 8, entry & 0xff
+            if offset > 0 and length > 0 and not (x == chunk_x and z == chunk_z):
+                extents.append((offset, length))
+        # Sort extents by starting offset
+        extents.sort()
+        # Terminator extent - track end of region file
+        extents.append((extents[-1][0] + extents[-1][1], 0))
+
+        # Write extent header
+        self._region.fd.seek(4 * (32 * chunk_z + chunk_x))
+        self._region.fd.write(Buffer.pack('I', 0))
+
+        # Write timestamp header
+        self._region.fd.seek(4096 + 4 * (32 * chunk_z + chunk_x))
+        self._region.fd.write(Buffer.pack('I', 0))
+
+        # Truncate file
+        self._region.fd.seek(4096 * extents[-1][0])
+        self._region.fd.truncate()
+
+        # Delete oversized chunk file if present
+        oversized_chunk_path = self.get_chunk_path(chunk_x, chunk_z)
+        oversized_chunk_path.unlink(True)
+
     def load_chunk_section(self, chunk_x, chunk_y, chunk_z):
         """
         Loads the chunk section at the given co-ordinates from the region file.
