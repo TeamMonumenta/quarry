@@ -13,6 +13,8 @@ from brigadier.string_reader import StringReader
 
 from mutf8.mutf8 import encode_modified_utf8, decode_modified_utf8
 
+from pathlib import Path
+
 from quarry.types.buffer import Buffer
 from quarry.types.text_format import ansify_text, get_format, unformat_text
 from quarry.types.chunk import PackedArray
@@ -1480,6 +1482,17 @@ class RegionFile(object):
     Experimental support for the Minecraft world storage format (``.mca``).
     """
     def __init__(self, path, read_only=False):
+        # Get rx, rz if possible
+        self.path = Path(path)
+        self.rx, self.rz = None, None
+        path_parts = self.path.name.split('.')
+        if len(path_parts) == 4 and path_parts[0] == 'r' and path_parts[3] == 'mca':
+            try:
+                self.rx = int(path_parts[1])
+                self.rz = int(path_parts[2])
+            except ValueError:
+                self.rx, self.rz = None, None
+
         self.fd = open(path, "rb" if read_only else "r+b")
 
     def __enter__(self):
@@ -1494,6 +1507,22 @@ class RegionFile(object):
         """
         self.fd.close()
 
+    def get_chunk_path(self, chunk_x, chunk_z):
+        """
+        Gets the path to an oversized chunk from Paper.
+        The co-ordinates should range from 0 to 31. Returns a Path from
+        the same folder as this region file, or None if
+        the region file's path is unknown.
+        """
+        # Paper's oversized chunk format;
+        # stored in separate file f'c.{cx}.{cz}.mcc' (with region offset)
+        if self.rx is None or self.rz is None:
+            return None
+        cx = self.rx << 5 | chunk_x
+        cz = self.rz << 5 | chunk_z
+        path = self.path.parent / f'c.{cx}.{cz}.mcc'
+        return path
+
     def save_chunk(self, chunk):
         """
         Saves the given chunk, which should be a ``TagRoot``, to the region
@@ -1503,9 +1532,15 @@ class RegionFile(object):
         # Compress chunk
         chunk_x = chunk.body.value["Level"].value["xPos"].value & 0x1f
         chunk_z = chunk.body.value["Level"].value["zPos"].value & 0x1f
-        chunk = zlib.compress(chunk.to_bytes())
-        chunk = Buffer.pack('IB', len(chunk), 2) + chunk
+        chunk_contents = zlib.compress(chunk.to_bytes())
+        chunk = Buffer.pack('IB', len(chunk_contents), 2) + chunk_contents
         chunk_length = 1 + (len(chunk) - 1) // 4096
+
+        oversized_chunk_path = self.get_chunk_path(chunk_x, chunk_z)
+        is_oversized = chunk_length > 0xFF
+        if is_oversized:
+            # Chunk is oversized - size, format, contents are assumed to be magic values for now
+            chunk = Buffer.pack('IB', 1, 130) + b'x'
 
         # Load extents
         extents = [(0, 2)]
@@ -1545,6 +1580,15 @@ class RegionFile(object):
         # Truncate file
         self.fd.seek(4096 * extents[-1][0])
         self.fd.truncate()
+
+        # If the region file was opened as read-only,
+        # an exception would have been raised by here.
+        if is_oversized:
+            with open(oversized_chunk_path, 'wb') as fp:
+                fp.write(chunk_contents)
+        else:
+            # Chunk is not (and possibly previously was) oversized
+            oversized_chunk_path.unlink(True)
 
     def list_chunks(self):
         """
@@ -1592,6 +1636,17 @@ class RegionFile(object):
             # Fix off-by-one when reading
             compressed_size = min(compressed_size, len(buff))
 
+            if (compressed_size, compression_format) == (1, 130):
+                # Paper's oversized chunk format
+                chunk_path = self.get_chunk_path(chunk_x, chunk_z)
+                if chunk_path is None:
+                    return None
+                with open(chunk_path, 'rb') as fp:
+                    chunk = fp.read()
+                    chunk = zlib.decompress(chunk)
+                    chunk = TagRoot.from_bytes(chunk)
+                    return chunk
+
             chunk = buff.read(compressed_size)
             chunk = zlib.decompress(chunk)
             chunk = TagRoot.from_bytes(chunk)
@@ -1600,80 +1655,43 @@ class RegionFile(object):
             # No chunk at that location
             return None
 
-
-    def restore_chunk(self, old_region, chunk_x, chunk_z):
+    def delete_chunk(self, chunk_x, chunk_z):
         """
-        Restore the same chunk from an older region file as fast as possible.
-
-        Returns True if successful, otherwise False.
+        Deletes the chunk at the given co-ordinates from the region file.
+        The co-ordinates should range from 0 to 31. Returns a ``TagRoot``.
+        If no chunk is found, returns None.
         """
-        buff = Buffer()
 
-        # Read extent header
-        old_region.fd.seek(4 * (32 * chunk_z + chunk_x))
-        buff.add(old_region.fd.read(4))
-        entry = buff.unpack('I')
-        chunk_offset, chunk_length = entry >> 8, entry & 0xFF
-
-        if not entry:
-            # TODO Delete the chunk in the new region file.
-            return False
-
-        # Read chunk
-        old_region.fd.seek(4096 * chunk_offset)
-        buff.add(old_region.fd.read(4096 * chunk_length))
-        old_chunk = buff.read(buff.unpack('IB')[0])
-
-        # Skip decompression/unpacking/packing/compression
-
-        # Delete any variables that shouldn't carry forward.
-        del buff
-        del entry
-        del chunk_offset
-
-        # Save the region file back.
-        chunk = Buffer.pack('IB', len(old_chunk), 2) + old_chunk
-
-        # Load extents (The header and chunk offsets and lengths, ignoring the chunk being saved.)
-        extents = [(0, 2)]
+        # Load extents
+        extents = [(0, 2)] # Ignore the extent and timestamp tables.
         self.fd.seek(0)
-        buff = Buffer(self.fd.read(4096))
-        for idx in range(1024):
-            z, x = divmod(idx, 32)
-            entry = buff.unpack('I')
-            offset, length = entry >> 8, entry & 0xFF
-            if offset > 0 and not (x == chunk_x and z == chunk_z):
+        buff = Buffer(self._region.fd.read(4096))
+        for entry_index in range(1024):
+            z, x = divmod(entry_index, 32)
+            entry = buff.unpack('I') & 0xffffffff
+            offset, length = entry >> 8, entry & 0xff
+            if offset > 0 and length > 0 and not (x == chunk_x and z == chunk_z):
                 extents.append((offset, length))
+        # Sort extents by starting offset
         extents.sort()
-        extents.append((extents[-1][0] + extents[-1][1] + chunk_length, 0))
-
-        # Compute new extent
-        for idx in range(len(extents) - 1):
-            start = extents[idx][0] + extents[idx][1]
-            end = extents[idx+1][0]
-            if (end - start) >= chunk_length:
-                chunk_offset = start
-                extents.insert(idx+1, (chunk_offset, chunk_length))
-                break
+        # Terminator extent - track end of region file
+        extents.append((extents[-1][0] + extents[-1][1], 0))
 
         # Write extent header
-        self.fd.seek(4 * (32 * chunk_z + chunk_x))
-        self.fd.write(Buffer.pack(
-            'I', (chunk_offset << 8) | (chunk_length & 0xFF)))
+        self._region.fd.seek(4 * (32 * chunk_z + chunk_x))
+        self._region.fd.write(Buffer.pack('I', 0))
 
         # Write timestamp header
-        self.fd.seek(4096 + 4 * (32 * chunk_z + chunk_x))
-        self.fd.write(Buffer.pack('I', int(time.time())))
-
-        # Write chunk
-        self.fd.seek(4096 * chunk_offset)
-        self.fd.write(chunk)
+        self._region.fd.seek(4096 + 4 * (32 * chunk_z + chunk_x))
+        self._region.fd.write(Buffer.pack('I', 0))
 
         # Truncate file
-        self.fd.seek(4096 * extents[-1][0])
-        self.fd.truncate()
+        self._region.fd.seek(4096 * extents[-1][0])
+        self._region.fd.truncate()
 
-        return True
+        # Delete oversized chunk file if present
+        oversized_chunk_path = self.get_chunk_path(chunk_x, chunk_z)
+        oversized_chunk_path.unlink(True)
 
     def load_chunk_section(self, chunk_x, chunk_y, chunk_z):
         """
