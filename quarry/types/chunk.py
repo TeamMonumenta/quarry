@@ -286,10 +286,19 @@ class BlockArray(Sequence):
         for block data and the palette. Minecraft 1.13+ only.
         """
 
-        if 'Palette' not in section.value and 'BlockStates' not in section.value:
+        block_states = section.value.get('block_states', None)
+        if block_states is None:
+            # 1.13 - 1.16
+            nbt_palette = section.value.get('Palette', None)
+            storage = section.value.get('BlockStates', None)
+        else:
+            # 1.18
+            nbt_palette = block_states.value.get('palette', None)
+            storage = block_states.value.get('data', None)
+
+        if nbt_palette is None or storage is None:
             return cls.empty(registry, non_air)
 
-        nbt_palette = section.value['Palette']
         if isinstance(nbt_palette.value, _NBTPaletteProxy):
             proxy = nbt_palette.value
         else:
@@ -298,11 +307,10 @@ class BlockArray(Sequence):
                 proxy.append(entry)
             nbt_palette.value = proxy
 
-        storage = section.value["BlockStates"].value
         palette = proxy.palette
-        storage.length = 4096
-        storage.value_width = get_width(len(proxy), registry.max_bits)
-        return cls(storage, palette, registry, non_air)
+        storage.value.length = 4096
+        storage.value.value_width = get_width(len(proxy), registry.max_bits)
+        return cls(storage.value, palette, registry, non_air)
 
     # Instance methods --------------------------------------------------------
 

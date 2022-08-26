@@ -1530,8 +1530,18 @@ class RegionFile(object):
         """
 
         # Compress chunk
-        chunk_x = chunk.body.value["Level"].value["xPos"].value & 0x1f
-        chunk_z = chunk.body.value["Level"].value["zPos"].value & 0x1f
+        if "Position" in chunk.body.value: # An entities chunk
+            pos_array = chunk.body.value["Position"].value
+            chunk_x = pos_array[0] & 0x1f
+            chunk_z = pos_array[1] & 0x1f
+        else: # Normal chunk
+            chunk_dict = chunk.body.value
+            if "Level" in chunk_dict: # Pre-1.18 normal chunk
+                chunk_dict = chunk_dict["Level"].value
+
+            chunk_x = chunk_dict["xPos"].value & 0x1f
+            chunk_z = chunk_dict["zPos"].value & 0x1f
+
         chunk_contents = zlib.compress(chunk.to_bytes())
         chunk = Buffer.pack('IB', len(chunk_contents), 2) + chunk_contents
         chunk_length = 1 + (len(chunk) - 1) // 4096
@@ -1700,7 +1710,10 @@ class RegionFile(object):
         """
 
         chunk = self.load_chunk(chunk_x, chunk_z)
-        sections = chunk.body.value["Level"].value["Sections"].value
+        chunk_dict = chunk.body.value
+        if "Level" in chunk_dict:
+            chunk_dict = chunk_dict["Level"].value
+        sections = chunk_dict["Sections"].value
         for section in sections:
             if section.value["Y"].value == chunk_y:
                 return chunk, section
