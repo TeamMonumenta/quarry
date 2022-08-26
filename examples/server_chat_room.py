@@ -2,17 +2,16 @@
 Example "chat room" server
 
 This server authenticates players, then spawns them in an empty world and does
-the bare minimum to keep them in-game. Players can speak to eachother using
+the bare minimum to keep them in-game. Players can speak to each other using
 chat.
 
-Supports Minecraft 1.15 & 1.16. Earlier versions will not work as the packet formats
-differ.
+Supports Minecraft 1.16.3+.
 """
 
 from twisted.internet import reactor
 from quarry.net.server import ServerFactory, ServerProtocol
-from quarry.types.nbt import TagByte, TagCompound, TagFloat, TagInt, TagList, TagLong, TagRoot, TagString
 from quarry.types.uuid import UUID
+from quarry.data.data_packs import data_packs, dimension_types
 
 
 class ChatRoomProtocol(ServerProtocol):
@@ -20,182 +19,147 @@ class ChatRoomProtocol(ServerProtocol):
         # Call super. This switches us to "play" mode, marks the player as
         #   in-game, and does some logging.
         ServerProtocol.player_joined(self)
-        
-        dim_name = "minecraft:the_end"
 
-        if self.protocol_version > 736: # Minecraft 1.16.2
-            # Send "Join Game" packet
-            biome_codec = TagCompound({
-                "type" : TagString("minecraft:worldgen/biome"),
-                "value": TagList([
-                    TagCompound({
-                        'name'   : TagString("minecraft:plains"), # Client crashes if you do not define plains
-                        'id'     : TagInt(1),
-                        'element': TagCompound({
-                            'precipitation': TagString("none"),
-                            'effects'      : TagCompound({
-                                'sky_color'      : TagInt(0),
-                                'water_fog_color': TagInt(0),
-                                'fog_color'      : TagInt(0),
-                                'water_color'    : TagInt(0),
-                            }),
-                            'depth'      : TagFloat(0.1),
-                            'temperature': TagFloat(0.5),
-                            'scale'      : TagFloat(0.2),
-                            'downfall'   : TagFloat(0.5),
-                            'category'   : TagString("plains")
-                        }),
-                    })
-                ])
-            })
-            dim_settings = TagCompound({
-                "natural"             : TagByte(1),
-                "ambient_light"       : TagFloat(0.0),
-                "has_ceiling"         : TagByte(0),
-                "has_skylight"        : TagByte(0),
-                "fixed_time"          : TagLong(6000),
-                "ultrawarm"           : TagByte(0),
-                "has_raids"           : TagByte(0),
-                "respawn_anchor_works": TagByte(0),
-                "bed_works"           : TagByte(0),
-                "piglin_safe"         : TagByte(0),
-                "logical_height"      : TagInt(256),
-                "infiniburn"          : TagString("minecraft:infiniburn_end"),
-                "coordinate_scale"    : TagFloat(1.0)
-            })
-            dim_codec = TagRoot({
-                '': TagCompound({
-                    "minecraft:dimension_type": TagCompound({
-                        "type" : TagString("minecraft:dimension_type"),
-                        "value": TagList([
-                            TagCompound({
-                                "name"   : TagString(dim_name),
-                                "id"     : TagInt(0),
-                                "element": dim_settings
-                            }),
-                        ]),
-                    }),
-                    "minecraft:worldgen/biome": biome_codec
-                })
-            })
-            current_dim = TagRoot({
-                '': dim_settings,
-            })
+        # Build up fields for "Join Game" packet
+        entity_id = 0
+        max_players = 0
+        hashed_seed = 42
+        view_distance = 2
+        simulation_distance = 2
+        game_mode = 3
+        prev_game_mode = 3
+        is_hardcore = False
+        is_respawn_screen = True
+        is_reduced_debug = False
+        is_debug = False
+        is_flat = False
 
-            self.send_packet("join_game",
-                             self.buff_type.pack("i?BB", 0, False, 3, 3),           # entity id, hardcore, game mode, previous game mode
-                             self.buff_type.pack_varint(1),                         # world count
-                             self.buff_type.pack_string(dim_name),                  # world name(s)
-                             self.buff_type.pack_nbt(dim_codec),                    # dimension registry
-                             self.buff_type.pack_nbt(current_dim),                  # current dimension
-                             self.buff_type.pack_string(dim_name),                  # world name
-                             self.buff_type.pack("q", 42),                          # hashed seed
-                             self.buff_type.pack_varint(0),                         # max players (unused)
-                             self.buff_type.pack_varint(2),                         # view distance
-                             self.buff_type.pack("????", True, True, False, True))  # respawn screen, debug world, flat world
+        dimension_codec = data_packs[self.protocol_version]
+        dimension_name = "minecraft:overworld"
+        dimension_tag = dimension_types[self.protocol_version, dimension_name]
+        world_count = 1
+        world_name = "chat"
 
-        elif self.protocol_version > 578:  # Minecraft 1.16.1
-            # Send "Join Game" packet
-            dim_codec = TagRoot({
-                '': TagCompound({
-                    "dimension": TagList([
-                        TagCompound({
-                            "name"                : TagString(dim_name),
-                            "natural"             : TagByte(0),
-                            "ambient_light"       : TagFloat(0.0),
-                            "has_ceiling"         : TagByte(0),
-                            "has_skylight"        : TagByte(0),
-                            "fixed_time"          : TagLong(6000),
-                            "shrunk"              : TagByte(0),
-                            "ultrawarm"           : TagByte(0),
-                            "has_raids"           : TagByte(1),
-                            "respawn_anchor_works": TagByte(0),
-                            "bed_works"           : TagByte(0),
-                            "piglin_safe"         : TagByte(0),
-                            "logical_height"      : TagInt(256),
-                            "infiniburn"          : TagString("minecraft:infiniburn_end"),
-                        }),
-                    ])
-                })
-            })
-            self.send_packet("join_game",
-                             self.buff_type.pack("iBB", 0, 3, 3),                   # entity id, game mode, previous game mode
-                             self.buff_type.pack_varint(1),                         # world count
-                             self.buff_type.pack_string(dim_name),                  # world name(s)
-                             self.buff_type.pack_nbt(dim_codec),                    # dimension registry
-                             self.buff_type.pack_string(dim_name),                  # dimension
-                             self.buff_type.pack_string(dim_name),                  # world name
-                             self.buff_type.pack("qB", 42, 0),                      # hashed seed, max players (unused)
-                             self.buff_type.pack_varint(2),                         # view distance
-                             self.buff_type.pack("????", True, True, False, True))  # respawn screen, debug world, flat world
-        else:  # Minecraft 1.15
-            # Send "Join Game" packet
-            self.send_packet("join_game",
-                self.buff_type.pack("iBiqB",
-                    0,                              # entity id
-                    3,                              # game mode
-                    0,                              # dimension
-                    0,                              # hashed seed
-                    0),                             # max players
-                self.buff_type.pack_string("flat"), # level type
-                self.buff_type.pack_varint(1),      # view distance
-                self.buff_type.pack("??",
-                    False,                          # reduced debug info
-                    True))                          # show respawn screen
+        join_game = [
+            self.buff_type.pack("i?Bb", entity_id, is_hardcore, game_mode, prev_game_mode),
+            self.buff_type.pack_varint(world_count),
+            self.buff_type.pack_string(world_name),
+            self.buff_type.pack_nbt(dimension_codec),
+        ]
+
+        if self.protocol_version >= 759:  # 1.19 needs just dimension name, <1.19 needs entire dimension nbt
+            join_game.append(self.buff_type.pack_string(dimension_name))
+        else:
+            join_game.append(self.buff_type.pack_nbt(dimension_tag))
+
+        join_game.append(self.buff_type.pack_string(world_name))
+        join_game.append(self.buff_type.pack("q", hashed_seed))
+        join_game.append(self.buff_type.pack_varint(max_players))
+        join_game.append(self.buff_type.pack_varint(view_distance)),
+
+        if self.protocol_version >= 757:  # 1.18
+            join_game.append(self.buff_type.pack_varint(simulation_distance))
+
+        join_game.append(self.buff_type.pack("????", is_reduced_debug, is_respawn_screen, is_debug, is_flat))
+
+        if self.protocol_version >= 759:  # 1.19
+            join_game.append(self.buff_type.pack("?", False))
+        # Send "Join Game" packet
+        self.send_packet("join_game", *join_game)
+
 
         # Send "Player Position and Look" packet
-        self.send_packet("player_position_and_look",
+        self.send_packet(
+            "player_position_and_look",
             self.buff_type.pack("dddff?",
                 0,                         # x
-                255,                       # y
+                500,                       # y  Must be >= build height to pass the "Loading Terrain" screen on 1.18.2
                 0,                         # z
                 0,                         # yaw
                 0,                         # pitch
                 0b00000),                  # flags
-            self.buff_type.pack_varint(0)) # teleport id
-
+            self.buff_type.pack_varint(0), # teleport id
+            self.buff_type.pack("?", True)) # Leave vehicle,
         # Start sending "Keep Alive" packets
         self.ticker.add_loop(20, self.update_keep_alive)
 
         # Announce player joined
-        self.factory.send_chat(u"\u00a7e%s has joined." % self.display_name)
+        self.factory.send_system("\u00a7e%s has joined." % self.display_name)
 
     def player_left(self):
         ServerProtocol.player_left(self)
 
         # Announce player left
-        self.factory.send_chat(u"\u00a7e%s has left." % self.display_name)
+        self.factory.send_system("\u00a7e%s has left." % self.display_name)
 
     def update_keep_alive(self):
         # Send a "Keep Alive" packet
-
-        # 1.7.x
-        if self.protocol_version <= 338:
-            payload =  self.buff_type.pack_varint(0)
-
-        # 1.12.2
-        else:
-            payload = self.buff_type.pack('Q', 0)
-
-        self.send_packet("keep_alive", payload)
+        self.send_packet("keep_alive", self.buff_type.pack('Q', 0))
 
     def packet_chat_message(self, buff):
         # When we receive a chat message from the player, ask the factory
         # to relay it to all connected players
-        p_text = buff.unpack_string()
-        self.factory.send_chat("<%s> %s" % (self.display_name, p_text), sender=self.uuid)
+        self.factory.send_chat(buff, self.uuid, self.display_name, self.protocol_version >= 759)
 
 
 class ChatRoomFactory(ServerFactory):
     protocol = ChatRoomProtocol
     motd = "Chat Room Server"
 
-    def send_chat(self, message, sender=UUID(int=0)):
+    def send_chat(self, packet, sender, sender_name, signed):
+        message = packet.unpack_string()
+        timestamp = None
+        salt = None
+        signature_length = 0
+        signature = None
+        previewed = False
+
+        if signed:
+            timestamp = packet.unpack('Q')
+            salt = packet.unpack('Q')
+            signature_length = packet.unpack_varint()
+            signature = packet.read(signature_length)
+            previewed = packet.unpack('?')
+
         for player in self.players:
-            data = player.buff_type.pack_chat(message) + player.buff_type.pack('B', 0)
-            if player.protocol_version > 578:
-                data += player.buff_type.pack_uuid(sender)
-            player.send_packet("chat_message", data)
+            # 1.19+, type is now varint
+            if player.protocol_version >= 759:
+                # Signed, send message with signature
+                if signature is not None and len(signature):
+                    player.send_packet("chat_message",
+                                       player.buff_type.pack_chat(message),  # Signed message
+                                       player.buff_type.pack('?', False),  # No unsigned content
+                                       player.buff_type.pack_varint(0),  # Message type
+                                       player.buff_type.pack_uuid(sender),  # Sender UUID
+                                       player.buff_type.pack_chat(sender_name),  # Sender display name
+                                       player.buff_type.pack('?', False),  # No team name
+                                       player.buff_type.pack('QQ', timestamp, salt),  # Timestamp, salt
+                                       player.buff_type.pack_varint(signature_length),  # Signature length
+                                       # Timestamp, signature length
+                                       signature)  # Signature
+                else:  # Not signed, send as system message to avoid client warnings
+                    player.send_packet("system_message",
+                                       player.buff_type.pack_chat("<%s> %s" % (sender_name, message)),
+                                       player.buff_type.pack_varint(1))
+            else:
+                # Ignore signature as not supported by client
+                player.send_packet("chat_message",
+                                   player.buff_type.pack_chat("<%s> %s" % (sender_name, message)),
+                                   player.buff_type.pack('B', 0),
+                                   player.buff_type.pack_uuid(sender))
+
+    def send_system(self, message):
+        for player in self.players:
+            # 1.19+, use system message packet
+            if player.protocol_version >= 759:
+                player.send_packet("system_message",
+                                   player.buff_type.pack_chat(message),
+                                   player.buff_type.pack_varint(1))
+            else:
+                player.send_packet("chat_message",
+                                   player.buff_type.pack_chat(message),
+                                   player.buff_type.pack('B', 0),
+                                   player.buff_type.pack_uuid(UUID(int=0)))
 
 
 def main(argv):

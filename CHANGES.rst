@@ -4,7 +4,47 @@ Changelog
 master
 ------
 
-Nothing yet.
+- Added support for Minecraft 1.16.4
+- Added support for the 1.16 chunk data format
+
+  - The older format (1.15 and below; non-contiguous entries) is
+    *no longer supported*. If you need it, use an older version of Quarry!
+  - Bitwise reversals are no longer performed, making the implementation faster
+  - ``PackedArray.from_bytes()``, ``PackedArray.from_block_bytes()`` and
+    ``BlockArray.from_bytes()`` no longer guess the value width; it must be
+    supplied. The parameters of these methods have been re-ordered accordingly
+
+- Added ``quarry.data.data_packs`` module, which provides a subset of vanilla
+  data packs as conveyed by the ``join_game`` packet. Adjusted the
+  ``server_chat_room`` example to make use of this data.
+- Added ``client_data_pack_dumper`` example, which can be used to dump a subset
+  of a server's data pack.
+- Added ``__slots__`` entries to NBT classes for a faster/more compact
+  representation in memory.
+- Added support for a newer ``launcher_profiles.json`` schema
+- Removed call to ``logging.basicConfig()`` (thanks @tazz4843)
+- Fixed ``chat_message`` packet packing/unpacking in ``client_chat_logger``,
+  ``client_messenger`` and ``proxy_hide_chat`` examples.
+- Fixed incorrect usage of ``ClientFactory`` in *Writing Servers* document
+  (thanks @vcokltfre)
+
+v1.6.2
+------
+
+- Added support for Minecraft 1.16.3 (thanks @dries007)
+
+v1.6.1
+------
+
+- Added support for Minecraft 1.16.2 (thanks @JLyne)
+- Fixed unpacking of ``login_success`` packet in 1.16+ (thanks @netux)
+
+v1.6
+----
+
+- Added support for Minecraft 1.16.1 (thanks @dries007)
+- Added support for loading profiles in macOS (thanks @techkid6)
+- Fixed ``server_chat_room`` example ``join_game`` packet fields
 
 v1.5.1
 ------

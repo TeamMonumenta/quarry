@@ -1434,11 +1434,11 @@ class TagRoot(TagCompound):
 
     @classmethod
     def from_body(cls, body):
-        return cls({u"": body})
+        return cls({"": body})
 
     @property
     def body(self):
-        return self.value[u""]
+        return self.value[""]
 
 
 # Register tags ---------------------------------------------------------------
@@ -1729,11 +1729,11 @@ def alt_repr(tag, level=0):
             name(tag),
             len(tag.value),
             "  " * level,
-            u"\n".join(alt_repr(tag, level+1) for tag in tag.value),
+            "\n".join(alt_repr(tag, level+1) for tag in tag.value),
             "  " * level)
 
     elif isinstance(tag, TagRoot):
-        return u"\n".join(
+        return "\n".join(
                 alt_repr(tag, level).replace(': ', '("%s"): ' % name, 1)
                 for name, tag in tag.value.items())
 
@@ -1743,7 +1743,7 @@ def alt_repr(tag, level=0):
             name(tag),
             len(tag.value),
             "  " * level,
-            u"\n".join(
+            "\n".join(
                 alt_repr(tag, level+1).replace(': ', '("%s"): ' % name, 1)
                 for name, tag in tag.value.items()),
             "  " * level)

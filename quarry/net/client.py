@@ -1,6 +1,7 @@
 from twisted.internet import reactor, protocol, defer
 from twisted.python import failure
 
+from quarry.types.chat import Message
 from quarry.net.protocol import Factory, Protocol, ProtocolError, \
     protocol_modes_inv
 from quarry.net import auth, crypto
@@ -39,8 +40,14 @@ class ClientProtocol(Protocol):
 
         elif mode == "login":
             # Send login start
-            self.send_packet("login_start", self.buff_type.pack_string(
-                self.factory.profile.display_name))
+            if self.protocol_version >= 759:  # 1.19+
+                self.send_packet("login_start",
+                                 self.buff_type.pack_string(self.factory.profile.display_name),
+                                 self.buff_type.pack("?", False))  # No signature as we haven't implemented them here
+            else:
+                # Send login start
+                self.send_packet("login_start", self.buff_type.pack_string(
+                    self.factory.profile.display_name))
 
     # Callbacks ---------------------------------------------------------------
 
@@ -85,10 +92,18 @@ class ClientProtocol(Protocol):
             pack_array = lambda d: self.buff_type.pack_varint(
                 len(d), max_bits=16) + d
 
-        self.send_packet(
-            "login_encryption_response",
-            pack_array(p_shared_secret) +
-            pack_array(p_verify_token))
+        # 1.19+
+        if self.protocol_version >= 759:
+            self.send_packet(
+                "login_encryption_response",
+                pack_array(p_shared_secret),
+                self.buff_type.pack('?', True),  # Indicate we are still doing things the old way
+                pack_array(p_verify_token))
+        else:
+            self.send_packet(
+                "login_encryption_response",
+                pack_array(p_shared_secret) +
+                pack_array(p_verify_token))
 
         # Enable encryption
         self.cipher.enable(self.shared_secret)
@@ -175,6 +190,9 @@ class ClientProtocol(Protocol):
             p_uuid = buff.unpack_string()
         p_display_name = buff.unpack_string()
 
+        if self.protocol_version >= 759:
+            buff.read()  # Properties
+
         self.switch_protocol_mode("play")
         self.player_joined()
 
@@ -234,6 +252,9 @@ class SpawningClientProtocol(ClientProtocol):
             # 1.9.x
             if self.protocol_version > 47:
                 teleport_id = buff.unpack_varint()
+
+            if self.protocol_version > 754:
+                dismount_vehicle = buff.unpack('?')
 
         # Send Player Position And Look
 
@@ -298,9 +319,12 @@ class PingClientProtocol(ClientProtocol):
         if detected_version in self.factory.minecraft_versions:
             self.factory.detected_protocol_version.callback(detected_version)
         else:
+            message = "Unsupported protocol version (%d)" % detected_version
+            if 'description' in data:
+                motd = Message(data['description'])
+                message = "%s: %s" % (message, motd.to_string())
             self.factory.detected_protocol_version.errback(
-                failure.Failure(ProtocolError(
-                    "Unsupported protocol version: %d" % detected_version)))
+                failure.Failure(ProtocolError(message)))
 
 
 class PingClientFactory(ClientFactory):
