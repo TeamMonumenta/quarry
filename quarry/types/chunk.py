@@ -292,10 +292,19 @@ class BlockArray(Sequence):
         for block data and the palette. Minecraft 1.13+ only.
         """
 
-        if 'Palette' not in section.value and 'BlockStates' not in section.value:
+        nbt_palette = None
+        storage = None
+        if 'block_states' in section.value:
+            block_states = section.value['block_states']
+            if 'palette' in block_states.value and 'data' in block_states.value:
+                nbt_palette = block_states.value['palette']
+                storage = block_states.value['data'].value
+        elif 'Palette' in section.value and 'BlockStates' in section.value:
+            nbt_palette = section.value['Palette']
+            storage = section.value['BlockStates'].value
+        else:
             return cls.empty(registry, non_air)
 
-        nbt_palette = section.value['Palette']
         if isinstance(nbt_palette.value, _NBTPaletteProxy):
             proxy = nbt_palette.value
         else:
@@ -304,7 +313,6 @@ class BlockArray(Sequence):
                 proxy.append(entry)
             nbt_palette.value = proxy
 
-        storage = section.value["BlockStates"].value
         palette = proxy.palette
         storage.length = 4096
         storage.value_width = get_width(len(proxy), registry.max_bits)
