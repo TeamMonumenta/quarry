@@ -1598,7 +1598,8 @@ class RegionFile(object):
                 fp.write(chunk_contents)
         else:
             # Chunk is not (and possibly previously was) oversized
-            oversized_chunk_path.unlink(True)
+            if oversized_chunk_path.exists():
+                oversized_chunk_path.unlink()
 
     def list_chunks(self):
         """
@@ -1701,7 +1702,8 @@ class RegionFile(object):
 
         # Delete oversized chunk file if present
         oversized_chunk_path = self.get_chunk_path(chunk_x, chunk_z)
-        oversized_chunk_path.unlink(True)
+        if oversized_chunk_path.exists():
+            oversized_chunk_path.unlink()
 
     def load_chunk_section(self, chunk_x, chunk_y, chunk_z):
         """
