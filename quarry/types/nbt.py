@@ -1659,7 +1659,11 @@ class RegionFile(object):
                     return chunk
 
             chunk = buff.read(compressed_size)
-            chunk = zlib.decompress(chunk)
+            try:
+                chunk = zlib.decompress(chunk)
+            except Exception as ex:
+                print(f"Failed to decompress chunk={chunk_x},{chunk_z} in region={self.path} size={compressed_size} format={compression_format} ex=", ex, file=sys.stderr)
+                raise ex
             chunk = TagRoot.from_bytes(chunk)
             return chunk
         else:
