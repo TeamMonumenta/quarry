@@ -1680,7 +1680,7 @@ class RegionFile(object):
         # Load extents
         extents = [(0, 2)] # Ignore the extent and timestamp tables.
         self.fd.seek(0)
-        buff = Buffer(self._region.fd.read(4096))
+        buff = Buffer(self.fd.read(4096))
         for entry_index in range(1024):
             z, x = divmod(entry_index, 32)
             entry = buff.unpack('I') & 0xffffffff
@@ -1693,16 +1693,16 @@ class RegionFile(object):
         extents.append((extents[-1][0] + extents[-1][1], 0))
 
         # Write extent header
-        self._region.fd.seek(4 * (32 * chunk_z + chunk_x))
-        self._region.fd.write(Buffer.pack('I', 0))
+        self.fd.seek(4 * (32 * chunk_z + chunk_x))
+        self.fd.write(Buffer.pack('I', 0))
 
         # Write timestamp header
-        self._region.fd.seek(4096 + 4 * (32 * chunk_z + chunk_x))
-        self._region.fd.write(Buffer.pack('I', 0))
+        self.fd.seek(4096 + 4 * (32 * chunk_z + chunk_x))
+        self.fd.write(Buffer.pack('I', 0))
 
         # Truncate file
-        self._region.fd.seek(4096 * extents[-1][0])
-        self._region.fd.truncate()
+        self.fd.seek(4096 * extents[-1][0])
+        self.fd.truncate()
 
         # Delete oversized chunk file if present
         oversized_chunk_path = self.get_chunk_path(chunk_x, chunk_z)
