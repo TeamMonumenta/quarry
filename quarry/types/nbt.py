@@ -85,6 +85,9 @@ class _Tag(object):
 
         return f'{prefix}{self.value!s}{postfix}'
 
+    def to_json(self):
+        return self.value
+
     def tree(self, sort=None, indent='    ', level=0):
         result = self.to_mojangson(sort=sort, highlight=True)
         if level == 0:
@@ -261,6 +264,15 @@ class _ArrayTag(_Tag):
                 content -= (1<<(self.width))
             inner_mojangson.append(f'{content!s}{type_postfix}')
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
+
+    def to_json(self):
+        inner_json = []
+        for content in self.value:
+            # Converted packed unsigned values to signed values
+            if content >= (1<<(self.width - 1)):
+                content -= (1<<(self.width))
+            inner_json.append(content)
+        return inner_json
 
     def tree(self, sort=None, indent='    ', level=0):
         prefix = self.prefix[True]
@@ -620,6 +632,9 @@ class TagList(_Tag):
             inner_mojangson.append(content.to_mojangson(sort, highlight))
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
 
+    def to_json(self):
+        return [content.to_json() for content in self.value]
+
     def tree(self, sort=None, indent='    ', level=0):
         prefix = f'{self.prefix[True]}\n'
         separator = f'{self.separator[True]}\n'
@@ -924,6 +939,12 @@ class TagCompound(_Tag):
                 key_str = key
             inner_mojangson.append(f'{key_str}{key_value_separator}{content.to_mojangson(sort, highlight)}')
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
+
+    def to_json(self):
+        inner_json = {}
+        for key in self.value.keys():
+            inner_json[key] = self.value[key].to_json()
+        return inner_json
 
     def tree(self, sort=None, indent='    ', level=0):
         prefix = f'{self.prefix[True]}\n'
