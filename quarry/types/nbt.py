@@ -165,12 +165,10 @@ class _DataTag(_Tag):
 
     def has_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        self._nbt_path_node_suffix_check(path)
         return not path.can_read()
 
     def at_path(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        self._nbt_path_node_suffix_check(path)
         if not path.can_read():
             return self
         else:
@@ -178,7 +176,6 @@ class _DataTag(_Tag):
 
     def count_multipath(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        self._nbt_path_node_suffix_check(path)
         if not path.can_read():
             return 1
         else:
@@ -186,7 +183,6 @@ class _DataTag(_Tag):
 
     def iter_multipath_pair(self, path):
         path = self._nbt_path_node_prefix_check(path)
-        self._nbt_path_node_suffix_check(path)
         if not path.can_read():
             yield ('', self)
 
