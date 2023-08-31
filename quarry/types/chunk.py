@@ -167,7 +167,7 @@ class PackedArray(Sequence):
         values_per_sector = self.sector_width // self.value_width
         sector_count = 1 + (self.length - 1) // values_per_sector
         self.storage.clear()
-        self.storage.append(self.sector_width * sector_count)
+        self.storage.append(BitArray(self.sector_width * sector_count))
 
     def pos(self, idx):
         """
