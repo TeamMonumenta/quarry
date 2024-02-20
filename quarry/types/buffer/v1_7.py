@@ -135,6 +135,19 @@ class Buffer1_7(object):
         data = self.read(struct.calcsize(">" + fmt) * length)
         return list(struct.unpack(">" + fmt * length, data))
 
+    @classmethod
+    def pack_byte_array(cls, data):
+        """
+        Packs an array of bytes preceded by varint denoting the array length.
+        """
+        return cls.pack_varint(len(data)) + data
+
+    def unpack_byte_array(self):
+        """
+        Unpack an array of bytes preceded by varint denoting the array length.
+        """
+        return self.read(self.unpack_varint())
+
     # Optional ----------------------------------------------------------------
 
     @classmethod
@@ -211,7 +224,7 @@ class Buffer1_7(object):
     @classmethod
     def pack_packet(cls, data, compression_threshold=-1):
         """
-        Unpacks a packet frame. This method handles length-prefixing and
+        Packs a packet frame. This method handles length-prefixing and
         compression.
         """
 
