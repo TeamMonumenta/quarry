@@ -80,8 +80,11 @@ class _Tag(object):
 
         return f'{prefix}{self.value!s}{postfix}'
 
-    def tree(self, sort=None, indent='    ', level=0):
-        result = self.to_mojangson(sort=sort, highlight=True)
+    def to_json(self):
+        return self.value
+
+    def tree(self, sort=None, indent='    ', level=0, highlight=True):
+        result = self.to_mojangson(sort=sort, highlight=highlight)
         if level == 0:
             print(result)
         else:
@@ -257,11 +260,20 @@ class _ArrayTag(_Tag):
             inner_mojangson.append(f'{content!s}{type_postfix}')
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
 
-    def tree(self, sort=None, indent='    ', level=0):
-        prefix = self.prefix[True]
-        separator = self.separator[True]
-        type_postfix = self.type_postfix[True]
-        postfix = self.postfix[True]
+    def to_json(self):
+        inner_json = []
+        for content in self.value:
+            # Converted packed unsigned values to signed values
+            if content >= (1<<(self.width - 1)):
+                content -= (1<<(self.width))
+            inner_json.append(content)
+        return inner_json
+
+    def tree(self, sort=None, indent='    ', level=0, highlight=True):
+        prefix = self.prefix[highlight]
+        separator = self.separator[highlight]
+        type_postfix = self.type_postfix[highlight]
+        postfix = self.postfix[highlight]
 
         inner_mojangson = []
         for content in self.value:
@@ -515,8 +527,8 @@ class TagString(_Tag):
             text = ansify_text(text, show_section=True)
         return f'{prefix}{text}{postfix}'
 
-    def tree(self, sort=None, indent='    ', level=0):
-        result = self.to_mojangson(highlight=True)
+    def tree(self, sort=None, indent='    ', level=0, highlight=True):
+        result = self.to_mojangson(highlight=highlight)
         if level == 0:
             print(result)
         else:
@@ -615,14 +627,17 @@ class TagList(_Tag):
             inner_mojangson.append(content.to_mojangson(sort, highlight))
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
 
-    def tree(self, sort=None, indent='    ', level=0):
-        prefix = f'{self.prefix[True]}\n'
-        separator = f'{self.separator[True]}\n'
-        postfix = f'{indent*level}{self.postfix[True]}'
+    def to_json(self):
+        return [content.to_json() for content in self.value]
+
+    def tree(self, sort=None, indent='    ', level=0, highlight=True):
+        prefix = f'{self.prefix[highlight]}\n'
+        separator = f'{self.separator[highlight]}\n'
+        postfix = f'{indent*level}{self.postfix[highlight]}'
 
         inner_mojangson = []
         for content in self.value:
-            inner_mojangson.append(indent*(level+1) + content.tree(sort, indent, level+1))
+            inner_mojangson.append(indent*(level+1) + content.tree(sort, indent, level+1, highlight=highlight))
 
         if len(inner_mojangson) == 0:
             result = f'{prefix}{postfix}'
@@ -916,11 +931,17 @@ class TagCompound(_Tag):
             inner_mojangson.append(f'{key}{key_value_separator}{content.to_mojangson(sort, highlight)}')
         return f'{prefix}{separator.join(inner_mojangson)}{postfix}'
 
-    def tree(self, sort=None, indent='    ', level=0):
-        prefix = f'{self.prefix[True]}\n'
-        key_value_separator = self.key_value_separator[True]
-        separator = f'{self.separator[True]}\n'
-        postfix = f'{indent*level}{self.postfix[True]}'
+    def to_json(self):
+        inner_json = {}
+        for key in self.value.keys():
+            inner_json[key] = self.value[key].to_json()
+        return inner_json
+
+    def tree(self, sort=None, indent='    ', level=0, highlight=True):
+        prefix = f'{self.prefix[highlight]}\n'
+        key_value_separator = self.key_value_separator[highlight]
+        separator = f'{self.separator[highlight]}\n'
+        postfix = f'{indent*level}{self.postfix[highlight]}'
 
         if isinstance(sort, list):
             keys = []
@@ -936,7 +957,11 @@ class TagCompound(_Tag):
         inner_mojangson = []
         for key in keys:
             content = self.value[key]
-            inner_mojangson.append(f'{indent*(level+1)}{key}{key_value_separator}{content.tree(sort, indent, level+1)}')
+            if self.regexUnquotedString.fullmatch(key):
+                key_str = key
+            else:
+                key_str = TagString.quote_value(key)
+            inner_mojangson.append(f'{indent*(level+1)}{key_str}{key_value_separator}{content.tree(sort, indent, level+1, highlight=highlight)}')
 
         if len(inner_mojangson) == 0:
             result = f'{prefix}{postfix}'
