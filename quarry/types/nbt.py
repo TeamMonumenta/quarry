@@ -514,7 +514,7 @@ class TagString(_Tag):
 
     @staticmethod
     def escape_value(text):
-        text = text.replace('\\', '\\\\').replace('\n', '\\n"')
+        text = text.replace('\\', '\\\\')
         if TagString.use_single_quotes(text):
             text = text.replace("'", "\\'")
         else:
