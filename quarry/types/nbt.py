@@ -616,7 +616,7 @@ class TagList(_Tag):
             head = TagByte(0)
 
         return Buffer.pack('bi', _ids[type(head)], len(self.value)) + \
-               b"".join(tag.to_bytes() for tag in self.value)
+               b"".join(tag.to_bytes(use_mutf8) for tag in self.value)
 
     def to_obj(self):
         return [tag.to_obj() for tag in self.value]
@@ -865,8 +865,8 @@ class TagCompound(_Tag):
         string = b""
         for name, tag in self.value.items():
             string += Buffer.pack('b', _ids[type(tag)])
-            string += TagString(name).to_bytes()
-            string += tag.to_bytes()
+            string += TagString(name).to_bytes(use_mutf8)
+            string += tag.to_bytes(use_mutf8)
 
         if len(self.value) == 0 or not self.root:
             string += Buffer.pack('b', 0)
@@ -1521,13 +1521,13 @@ class NBTFile(object):
         self.root_tag = root_tag
 
     @classmethod
-    def load(cls, path):
+    def load(cls, path, use_mutf8=True):
         with gzip.open(path, 'rb') as fd:
-            return cls(TagRoot.from_bytes(fd.read()))
+            return cls(TagRoot.from_bytes(fd.read(), use_mutf8))
 
-    def save(self, path):
+    def save(self, path, use_mutf8=True):
         with gzip.open(path, 'wb') as fd:
-            fd.write(self.root_tag.to_bytes())
+            fd.write(self.root_tag.to_bytes(use_mutf8))
 
 
 class RegionFile(object):
