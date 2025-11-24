@@ -48,14 +48,14 @@ class _Tag(object):
     postfix = ('', get_format('reset').ansi_code)
 
     @classmethod
-    def from_bytes(cls, bytes):
-        return cls.from_buff(Buffer(bytes))
+    def from_bytes(cls, bytes, use_mutf8=True):
+        return cls.from_buff(Buffer(bytes), use_mutf8)
 
     @classmethod
-    def from_buff(cls, buff):
+    def from_buff(cls, buff, use_mutf8=True):
         raise NotImplementedError
 
-    def to_bytes(self):
+    def to_bytes(self, use_mutf8=True):
         raise NotImplementedError
 
     def deep_copy(self):
@@ -140,10 +140,10 @@ class _DataTag(_Tag):
     fmt = None
 
     @classmethod
-    def from_buff(cls, buff):
+    def from_buff(cls, buff, use_mutf8=True):
         return cls(buff.unpack(cls.fmt))
 
-    def to_bytes(self):
+    def to_bytes(self, use_mutf8=True):
         return Buffer.pack(self.fmt, self.value)
 
     def diff(self, other, order_matters=True, show_values=False, path=''):
@@ -196,12 +196,12 @@ class _ArrayTag(_Tag):
         return len(self.value)
 
     @classmethod
-    def from_buff(cls, buff):
+    def from_buff(cls, buff, use_mutf8=True):
         length = buff.unpack('i')
         data = buff.read(length * (cls.width // 8))
         return cls(PackedArray.from_bytes(data, length, cls.width, cls.width))
 
-    def to_bytes(self):
+    def to_bytes(self, use_mutf8=True):
         data = self.value.to_bytes()
         data = Buffer.pack('i', len(data) // (self.width // 8)) + data
         return data
@@ -461,12 +461,36 @@ class TagString(_Tag):
         return (q, f'{get_format("white").ansi_code}{q}{get_format("reset").ansi_code}')
 
     @classmethod
-    def from_buff(cls, buff):
+    def from_buff(cls, buff, use_mutf8=True):
         string_length = buff.unpack('H')
-        return cls(decode_modified_utf8(buff.read(string_length)))
+        raw_bytes = buff.read(string_length)
+        if use_mutf8:
+            try:
+                value = decode_modified_utf8(raw_bytes)
+            except Exception:
+                try:
+                    raw_bytes.decode(encoding='utf-8')
+                    print(f"Failed to decode {raw_bytes!r} as Java's mutf8; appears to be normal utf8. This affects saving as well, so please update calling code.")
+                except Exception:
+                    print(f"Failed to decode {raw_bytes!r} as Java's mutf8; does not appear to be normal utf8 either?")
+                raise
+        else:
+            try:
+                value = raw_bytes.decode(encoding='utf-8')
+            except Exception:
+                try:
+                    decode_modified_utf8(raw_bytes)
+                    print(f"Failed to decode {raw_bytes!r} as normal utf8; appears to be Java's mutf8. This affects saving as well, so please update calling code.")
+                except Exception:
+                    print(f"Failed to decode {raw_bytes!r} as normal utf8; does not appear to be Java's mutf8 either?")
+                raise
+        return cls(value)
 
-    def to_bytes(self):
-        data = encode_modified_utf8(self.value)
+    def to_bytes(self, use_mutf8=True):
+        if use_mutf8:
+            data = encode_modified_utf8(self.value)
+        else:
+            data = self.value.encode(encoding='utf-8')
         return Buffer.pack('H', len(data)) + data
 
     def diff(self, other, order_matters=True, show_values=False, path=''):
@@ -580,12 +604,12 @@ class TagList(_Tag):
         return len(self.value)
 
     @classmethod
-    def from_buff(cls, buff):
+    def from_buff(cls, buff, use_mutf8=True):
         inner_kind_id, array_length = buff.unpack('bi')
         inner_kind = _kinds[inner_kind_id]
-        return cls([inner_kind.from_buff(buff) for _ in range(array_length)])
+        return cls([inner_kind.from_buff(buff, use_mutf8) for _ in range(array_length)])
 
-    def to_bytes(self):
+    def to_bytes(self, use_mutf8=True):
         if len(self.value) > 0:
             head = self.value[0]
         else:
@@ -820,7 +844,7 @@ class TagCompound(_Tag):
     regexUnquotedString = re.compile(r'''[A-Za-z0-9._+-]+''')
 
     @classmethod
-    def from_buff(cls, buff):
+    def from_buff(cls, buff, use_mutf8=True):
         if cls.preserve_order:
             value = collections.OrderedDict()
         else:
@@ -831,13 +855,13 @@ class TagCompound(_Tag):
             if kind_id == 0:
                 return cls(value)
             kind = _kinds[kind_id]
-            name = TagString.from_buff(buff).value
-            tag = kind.from_buff(buff)
+            name = TagString.from_buff(buff, use_mutf8).value
+            tag = kind.from_buff(buff, use_mutf8)
             value[name] = tag
             if cls.root:
                 return cls(value)
 
-    def to_bytes(self):
+    def to_bytes(self, use_mutf8=True):
         string = b""
         for name, tag in self.value.items():
             string += Buffer.pack('b', _ids[type(tag)])
