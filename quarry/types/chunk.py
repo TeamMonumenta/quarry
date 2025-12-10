@@ -195,25 +195,25 @@ class PackedArray(Sequence):
 
     def __iter__(self):
         for i in range(self.length):
-            yield self.storage._slice(*self.pos(i)).uint
+            yield self.storage[slice(*self.pos(i))].uint
 
     def __getitem__(self, item):
         if isinstance(item, slice):
-            return [self.storage._slice(*self.pos(idx)).uint
+            return [self.storage[slice(*self.pos(idx))].uint
                     for idx in range(*item.indices(len(self)))]
         else:
             if not 0 <= item < len(self):
                 raise IndexError(item)
-            return self.storage._slice(*self.pos(item)).uint
+            return self.storage[slice(*self.pos(item))].uint
 
     def __setitem__(self, item, value):
         if isinstance(item, slice):
             for idx, value in zip(range(*item.indices(len(self))), value):
-                self.storage._overwrite(
+                self.storage.overwrite(
                     bs=Bits(uint=value, length=self.value_width),
                     pos=self.pos(idx)[0])
         else:
-            self.storage._overwrite(
+            self.storage.overwrite(
                 bs=Bits(uint=value, length=self.value_width),
                 pos=self.pos(item)[0])
 
