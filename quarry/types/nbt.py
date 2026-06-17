@@ -1576,10 +1576,12 @@ class RegionFile(object):
         path = self.path.parent / f'c.{cx}.{cz}.mcc'
         return path
 
-    def save_chunk(self, chunk):
+    def save_chunk(self, chunk, compression_type: int = 2, force_external: bool = False):
         """
         Saves the given chunk, which should be a ``TagRoot``, to the region
-        file.
+        file. compression_type selects the Anvil encoding: 1=gzip, 2=zlib,
+        3=uncompressed. force_external writes the chunk as an external .mcc
+        file regardless of its size.
         """
 
         # Compress chunk
@@ -1595,12 +1597,19 @@ class RegionFile(object):
             chunk_x = chunk_dict["xPos"].value & 0x1f
             chunk_z = chunk_dict["zPos"].value & 0x1f
 
-        chunk_contents = zlib.compress(chunk.to_bytes())
-        chunk = Buffer.pack('IB', len(chunk_contents), 2) + chunk_contents
+        if compression_type == 1:
+            chunk_contents = gzip.compress(chunk.to_bytes())
+        elif compression_type == 2:
+            chunk_contents = zlib.compress(chunk.to_bytes())
+        elif compression_type == 3:
+            chunk_contents = chunk.to_bytes()
+        else:
+            raise ValueError(f"Unknown compression_type {compression_type}")
+        chunk = Buffer.pack('IB', len(chunk_contents), compression_type) + chunk_contents
         chunk_length = 1 + (len(chunk) - 1) // 4096
 
         oversized_chunk_path = self.get_chunk_path(chunk_x, chunk_z)
-        is_oversized = chunk_length > 0xFF
+        is_oversized = force_external or chunk_length > 0xFF
         if is_oversized:
             # Chunk is oversized - size, format, contents are assumed to be magic values for now
             chunk = Buffer.pack('IB', 1, 130) + b'x'
@@ -1713,7 +1722,14 @@ class RegionFile(object):
 
             chunk = buff.read(compressed_size)
             try:
-                chunk = zlib.decompress(chunk)
+                if compression_format == 1:
+                    chunk = gzip.decompress(chunk)
+                elif compression_format == 2:
+                    chunk = zlib.decompress(chunk)
+                elif compression_format == 3:
+                    pass  # already raw NBT bytes
+                else:
+                    raise ValueError(f"Unknown chunk compression format {compression_format}")
             except Exception as ex:
                 print(f"Failed to decompress chunk={chunk_x},{chunk_z} in region={self.path} size={compressed_size} format={compression_format} ex=", ex, file=sys.stderr)
                 raise ex
