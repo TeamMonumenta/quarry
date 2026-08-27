@@ -1605,14 +1605,23 @@ class RegionFile(object):
             chunk_contents = chunk.to_bytes()
         else:
             raise ValueError(f"Unknown compression_type {compression_type}")
-        chunk = Buffer.pack('IB', len(chunk_contents), compression_type) + chunk_contents
+        # The Anvil length field counts the compression-type byte plus the payload; Minecraft
+        # reads exactly length - 1 payload bytes. quarry historically wrote just the payload
+        # length, one byte short, which load_chunk used to compensate for. See load_chunk.
+        chunk = Buffer.pack('IB', len(chunk_contents) + 1, compression_type) + chunk_contents
         chunk_length = 1 + (len(chunk) - 1) // 4096
 
         oversized_chunk_path = self.get_chunk_path(chunk_x, chunk_z)
         is_oversized = force_external or chunk_length > 0xFF
         if is_oversized:
-            # Chunk is oversized - size, format, contents are assumed to be magic values for now
-            chunk = Buffer.pack('IB', 1, 130) + b'x'
+            # Oversized chunk: the payload goes to the sibling .mcc file written below and the
+            # inline frame becomes a stub. Minecraft writes a length of 1 (the compression byte
+            # alone, no inline payload) and sets the high bit of the compression type.
+            chunk = Buffer.pack('IB', 1, compression_type | 0x80)
+            # The stub occupies one sector, not however many the payload needed. This value both
+            # reserves space and lands in the location header's low 8 bits, so the payload's count
+            # would strand sectors and, at exactly 256, truncate to 0 and lose the chunk.
+            chunk_length = 1
 
         # Load extents
         extents = [(0, 2)]
@@ -1705,22 +1714,32 @@ class RegionFile(object):
             # Read chunk
             self.fd.seek(4096 * chunk_offset)
             buff.add(self.fd.read(4096 * chunk_length))
-            compressed_size, compression_format = buff.unpack('IB')
-            # Fix off-by-one when reading
-            compressed_size = min(compressed_size, len(buff))
+            declared_size, compression_format = buff.unpack('IB')
+            external = bool(compression_format & 0x80)
+            compression_format &= 0x7f
 
-            if (compressed_size, compression_format) == (1, 130):
-                # Paper's oversized chunk format
+            if external:
+                # Oversized chunk: the payload lives in a sibling c.<cx>.<cz>.mcc file and the
+                # inline frame is just a stub. Minecraft stores the whole file as the payload.
                 chunk_path = self.get_chunk_path(chunk_x, chunk_z)
                 if chunk_path is None:
                     return None
                 with open(chunk_path, 'rb') as fp:
                     chunk = fp.read()
-                    chunk = zlib.decompress(chunk)
-                    chunk = TagRoot.from_bytes(chunk)
-                    return chunk
+            else:
+                # Deliberately hand the decompressor everything left in the reserved sectors rather
+                # than slicing to declared_size - 1. Region files written by quarry before the length
+                # field was corrected are one byte short, and slicing to the spec length would
+                # truncate them; both zlib and gzip stop at their own end-of-stream marker and ignore
+                # the trailing sector padding, so reading a superset is safe either way. Truncated or
+                # corrupt data still raises rather than being silently accepted.
+                if compression_format == 3:
+                    # Raw NBT has no end-of-stream marker. Quarry never wrote uncompressed chunks
+                    # under the old convention, so this can assume the corrected length.
+                    chunk = buff.read(min(declared_size - 1, len(buff)))
+                else:
+                    chunk = buff.read(len(buff))
 
-            chunk = buff.read(compressed_size)
             try:
                 if compression_format == 1:
                     chunk = gzip.decompress(chunk)
@@ -1731,7 +1750,7 @@ class RegionFile(object):
                 else:
                     raise ValueError(f"Unknown chunk compression format {compression_format}")
             except Exception as ex:
-                print(f"Failed to decompress chunk={chunk_x},{chunk_z} in region={self.path} size={compressed_size} format={compression_format} ex=", ex, file=sys.stderr)
+                print(f"Failed to decompress chunk={chunk_x},{chunk_z} in region={self.path} size={declared_size} format={compression_format} external={external} ex=", ex, file=sys.stderr)
                 raise ex
             chunk = TagRoot.from_bytes(chunk)
             return chunk
